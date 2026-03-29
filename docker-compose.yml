@@ -1,0 +1,9 @@
+services:
+  count123:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: count123
+    ports:
+      - "8087:80"
+    restart: unless-stopped

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Count123 | Open Source Accounting</title>
+    <meta
+      name="description"
+      content="Count123 is an open source accounting software concept with a liquid-glass interface for modern finance teams."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <div class="orb orb-a"></div>
+      <div class="orb orb-b"></div>
+      <div class="orb orb-c"></div>
+
+      <header class="topbar glass">
+        <div class="brand-lockup">
+          <div class="brand-mark">123</div>
+          <div>
+            <p class="eyebrow">Open Source Accounting</p>
+            <h1>Count123</h1>
+          </div>
+        </div>
+
+        <nav class="topnav" aria-label="Primary">
+          <a href="#vision">Vision</a>
+          <a href="#workspace">Workspace</a>
+          <a href="#modules">Modules</a>
+          <a href="#roadmap">Roadmap</a>
+        </nav>
+
+        <a class="cta-button" href="#workspace">Launch Prototype</a>
+      </header>
+
+      <main>
+        <section class="hero">
+          <div class="hero-copy glass">
+            <p class="eyebrow">Built for operators, controllers, and founders</p>
+            <h2>The open accounting system that feels fast, transparent, and inevitable.</h2>
+            <p class="hero-text">
+              Count123 starts with the ledger and builds upward: journals, reconciliation,
+              invoicing, reporting, entity management, and auditability in one open platform.
+            </p>
+
+            <div class="hero-actions">
+              <a class="cta-button" href="#workspace">Explore Dashboard</a>
+              <a class="secondary-button" href="#roadmap">View Product Thesis</a>
+            </div>
+
+            <ul class="hero-points">
+              <li>Double-entry first</li>
+              <li>Multi-entity ready</li>
+              <li>Audit-friendly by design</li>
+            </ul>
+          </div>
+
+          <aside class="hero-panel glass" id="vision">
+            <div class="panel-header">
+              <span class="status-dot"></span>
+              <p>System Health</p>
+            </div>
+
+            <div class="hero-metrics">
+              <article>
+                <span>MRR</span>
+                <strong>$182,340</strong>
+                <small>+12.4% vs prior month</small>
+              </article>
+              <article>
+                <span>Cash Runway</span>
+                <strong>19.6 mo</strong>
+                <small>Based on current burn</small>
+              </article>
+              <article>
+                <span>Close Readiness</span>
+                <strong>92%</strong>
+                <small>4 issues blocking close</small>
+              </article>
+            </div>
+
+            <div class="mini-chart">
+              <div class="bar" style="--size: 34%"></div>
+              <div class="bar" style="--size: 48%"></div>
+              <div class="bar" style="--size: 52%"></div>
+              <div class="bar" style="--size: 69%"></div>
+              <div class="bar" style="--size: 64%"></div>
+              <div class="bar" style="--size: 78%"></div>
+              <div class="bar accent" style="--size: 88%"></div>
+            </div>
+          </aside>
+        </section>
+
+        <section class="workspace" id="workspace">
+          <div class="section-heading">
+            <p class="eyebrow">Prototype Workspace</p>
+            <h3>Finance command center</h3>
+          </div>
+
+          <div class="workspace-grid">
+            <section class="glass large-panel">
+              <div class="panel-title-row">
+                <div>
+                  <p class="panel-label">Overview</p>
+                  <h4>Today at a glance</h4>
+                </div>
+                <div class="pill-group" id="range-switcher">
+                  <button class="pill active" data-range="7d">7D</button>
+                  <button class="pill" data-range="30d">30D</button>
+                  <button class="pill" data-range="90d">90D</button>
+                </div>
+              </div>
+
+              <div class="stats-grid" id="stats-grid">
+                <article class="stat-card">
+                  <span>Cash</span>
+                  <strong>$248,900</strong>
+                  <small>Across 4 accounts</small>
+                </article>
+                <article class="stat-card">
+                  <span>Accounts Receivable</span>
+                  <strong>$83,410</strong>
+                  <small>11 invoices outstanding</small>
+                </article>
+                <article class="stat-card">
+                  <span>Accounts Payable</span>
+                  <strong>$26,190</strong>
+                  <small>6 bills due this week</small>
+                </article>
+                <article class="stat-card">
+                  <span>Net Income</span>
+                  <strong>$41,870</strong>
+                  <small>Month to date</small>
+                </article>
+              </div>
+            </section>
+
+            <section class="glass">
+              <div class="panel-title-row">
+                <div>
+                  <p class="panel-label">Ledger Snapshot</p>
+                  <h4>Recent journal entries</h4>
+                </div>
+                <button class="secondary-button compact" id="post-entry">Post Demo Entry</button>
+              </div>
+
+              <div class="journal-list" id="journal-list"></div>
+            </section>
+
+            <section class="glass">
+              <div class="panel-title-row">
+                <div>
+                  <p class="panel-label">Operations</p>
+                  <h4>Close blockers</h4>
+                </div>
+              </div>
+
+              <ul class="task-list">
+                <li>
+                  <span class="task-tag urgent">Urgent</span>
+                  Stripe payout clearing account requires reconciliation
+                </li>
+                <li>
+                  <span class="task-tag">Review</span>
+                  Deferred revenue rule missing for annual plan invoices
+                </li>
+                <li>
+                  <span class="task-tag">Owner</span>
+                  Payroll accrual entry pending controller approval
+                </li>
+                <li>
+                  <span class="task-tag">Docs</span>
+                  Vendor W-9 missing for Northwind Logistics
+                </li>
+              </ul>
+            </section>
+          </div>
+        </section>
+
+        <section class="modules" id="modules">
+          <div class="section-heading">
+            <p class="eyebrow">Core Platform</p>
+            <h3>Modules Count123 should own</h3>
+          </div>
+
+          <div class="module-grid">
+            <article class="glass module-card">
+              <h4>General Ledger</h4>
+              <p>Journal entries, posting controls, period locking, drill-down audit trails.</p>
+            </article>
+            <article class="glass module-card">
+              <h4>Revenue & Billing</h4>
+              <p>Invoices, subscriptions, payment collection, revenue recognition policies.</p>
+            </article>
+            <article class="glass module-card">
+              <h4>Expenses & AP</h4>
+              <p>Bills, approvals, vendor records, payment runs, prepaid amortization.</p>
+            </article>
+            <article class="glass module-card">
+              <h4>Cash & Reconciliation</h4>
+              <p>Bank feeds, clearing accounts, matching rules, exception queues.</p>
+            </article>
+            <article class="glass module-card">
+              <h4>Reporting</h4>
+              <p>P&L, balance sheet, cash flow, dimension filters, board-ready exports.</p>
+            </article>
+            <article class="glass module-card">
+              <h4>Entities & Controls</h4>
+              <p>Multi-entity setup, permissions, approvals, audit logs, policy enforcement.</p>
+            </article>
+          </div>
+        </section>
+
+        <section class="roadmap glass" id="roadmap">
+          <div class="section-heading inline">
+            <div>
+              <p class="eyebrow">Roadmap</p>
+              <h3>From prototype to accounting platform</h3>
+            </div>
+            <p class="roadmap-copy">
+              The goal is not another bookkeeping toy. Count123 should become the open source
+              finance operating system teams can actually run a company on.
+            </p>
+          </div>
+
+          <div class="roadmap-grid">
+            <article>
+              <span>Phase 01</span>
+              <h4>Trust the ledger</h4>
+              <p>Build chart of accounts, journals, posting rules, and period close controls.</p>
+            </article>
+            <article>
+              <span>Phase 02</span>
+              <h4>Own money movement</h4>
+              <p>Ship AP, AR, invoices, bills, payments, and reconciliation workflows.</p>
+            </article>
+            <article>
+              <span>Phase 03</span>
+              <h4>Automate reporting</h4>
+              <p>Deliver statements, rollforwards, audit exports, and analytics APIs.</p>
+            </article>
+            <article>
+              <span>Phase 04</span>
+              <h4>Scale across entities</h4>
+              <p>Consolidation, intercompany eliminations, role controls, and integrations.</p>
+            </article>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
