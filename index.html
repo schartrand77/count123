@@ -63,475 +63,575 @@
         </section>
 
         <section class="workspace" id="workspace" hidden>
-          <section class="panel">
-            <div class="panel-header">
-              <div>
-                <p class="eyebrow">Overview</p>
-                <h2 id="company-name">Workspace</h2>
+          <div class="workspace-shell" id="workspace-shell">
+            <aside class="sidebar panel" id="sidebar">
+              <div class="sidebar-header">
+                <div>
+                  <p class="eyebrow">Navigation</p>
+                  <h2 class="sidebar-title">Workspace</h2>
+                </div>
+                <button class="ghost-button sidebar-toggle" id="sidebar-toggle" type="button" aria-label="Collapse sidebar">Collapse</button>
               </div>
-            </div>
-            <div class="summary-grid" id="summary-grid"></div>
-          </section>
 
-          <div class="workspace-layout">
-            <div class="stack">
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Master Data</p>
-                    <h3>Clients and vendors</h3>
+              <nav class="sidebar-nav" aria-label="Workspace pages">
+                <button class="sidebar-tab is-active" type="button" data-page="dashboard" title="Dashboard">
+                  <span class="tab-icon">DB</span>
+                  <span class="tab-label">Dashboard</span>
+                </button>
+                <button class="sidebar-tab" type="button" data-page="sales" title="Sales">
+                  <span class="tab-icon">SL</span>
+                  <span class="tab-label">Sales</span>
+                </button>
+                <button class="sidebar-tab" type="button" data-page="expenses" title="Expenses">
+                  <span class="tab-icon">EX</span>
+                  <span class="tab-label">Expenses</span>
+                </button>
+                <button class="sidebar-tab" type="button" data-page="ledger" title="Ledger">
+                  <span class="tab-icon">GL</span>
+                  <span class="tab-label">Ledger</span>
+                </button>
+                <button class="sidebar-tab" type="button" data-page="banking" title="Banking">
+                  <span class="tab-icon">BK</span>
+                  <span class="tab-label">Banking</span>
+                </button>
+                <button class="sidebar-tab" type="button" data-page="automation" title="Automation">
+                  <span class="tab-icon">AU</span>
+                  <span class="tab-label">Automation</span>
+                </button>
+                <button class="sidebar-tab" type="button" data-page="settings" title="Settings">
+                  <span class="tab-icon">ST</span>
+                  <span class="tab-label">Settings</span>
+                </button>
+              </nav>
+            </aside>
+
+            <div class="workspace-main">
+              <section class="workspace-page is-active" id="page-dashboard" data-page="dashboard">
+                <section class="panel">
+                  <div class="panel-header">
+                    <div>
+                      <p class="eyebrow">Overview</p>
+                      <h2 id="company-name">Workspace</h2>
+                    </div>
                   </div>
-                </div>
+                  <div class="summary-grid" id="summary-grid"></div>
+                </section>
 
-                <div class="form-grid two-up">
-                  <form class="record-form" id="client-form">
-                    <h4>New Client</h4>
-                    <label class="field">
-                      <span>Name</span>
-                      <input name="name" type="text" required />
-                    </label>
-                    <label class="field">
-                      <span>Email</span>
-                      <input name="email" type="email" />
-                    </label>
-                    <button class="primary-button" type="submit">Add Client</button>
-                  </form>
+                <div class="page-grid two-column section-spacer">
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Tax and Reporting</p>
+                        <h3>Books position</h3>
+                      </div>
+                    </div>
+                    <div class="summary-grid compact" id="tax-grid"></div>
+                    <div class="report-grid" id="report-grid"></div>
+                  </section>
 
-                  <form class="record-form" id="vendor-form">
-                    <h4>New Vendor</h4>
-                    <label class="field">
-                      <span>Name</span>
-                      <input name="name" type="text" required />
-                    </label>
-                    <label class="field">
-                      <span>Email</span>
-                      <input name="email" type="email" />
-                    </label>
-                    <button class="primary-button" type="submit">Add Vendor</button>
-                  </form>
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Phase 3</p>
+                        <h3>Cashflow timeline</h3>
+                      </div>
+                    </div>
+                    <div class="list-table" id="bank-timeline-list"></div>
+                  </section>
                 </div>
               </section>
 
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Phase 1</p>
-                    <h3>Company setup</h3>
-                  </div>
+              <section class="workspace-page" id="page-sales" data-page="sales" hidden>
+                <div class="page-grid two-column">
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Master Data</p>
+                        <h3>Clients</h3>
+                      </div>
+                    </div>
+                    <form class="record-form" id="client-form">
+                      <h4>New Client</h4>
+                      <label class="field">
+                        <span>Name</span>
+                        <input name="name" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Email</span>
+                        <input name="email" type="email" />
+                      </label>
+                      <button class="primary-button" type="submit">Add Client</button>
+                    </form>
+                    <div class="list-table section-spacer" id="client-list"></div>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Receivables</p>
+                        <h3>New invoice</h3>
+                      </div>
+                    </div>
+                    <form class="record-form" id="invoice-form">
+                      <h4>Create Invoice</h4>
+                      <label class="field">
+                        <span>Client</span>
+                        <select name="clientId" id="invoice-client" required></select>
+                      </label>
+                      <label class="field">
+                        <span>Description</span>
+                        <input name="description" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Subtotal</span>
+                        <input name="subtotal" type="number" step="0.01" min="0" required />
+                      </label>
+                      <label class="field">
+                        <span>Issue Date</span>
+                        <input name="issueDate" type="date" required />
+                      </label>
+                      <label class="field">
+                        <span>Due Date</span>
+                        <input name="dueDate" type="date" required />
+                      </label>
+                      <label class="field">
+                        <span>Tax Rate</span>
+                        <input name="taxRate" id="invoice-tax-rate" type="number" step="0.01" min="0" value="0.13" required />
+                      </label>
+                      <button class="primary-button" type="submit">Create Invoice</button>
+                    </form>
+                  </section>
                 </div>
 
-                <form class="record-form" id="company-form">
-                  <h4>Company Settings</h4>
-                  <label class="field">
-                    <span>Business Name</span>
-                    <input name="name" id="company-name-input" type="text" required />
-                  </label>
-                  <label class="field">
-                    <span>Currency</span>
-                    <input name="currency" id="company-currency-input" type="text" maxlength="3" required />
-                  </label>
-                  <label class="field">
-                    <span>Tax Label</span>
-                    <input name="taxName" id="company-tax-name-input" type="text" required />
-                  </label>
-                  <label class="field">
-                    <span>Default Tax Rate</span>
-                    <input
-                      name="defaultTaxRate"
-                      id="company-tax-rate-input"
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      required
-                    />
-                  </label>
-                  <button class="primary-button" type="submit">Save Settings</button>
-                </form>
+                <section class="panel section-spacer">
+                  <div class="panel-header">
+                    <div>
+                      <p class="eyebrow">Receivables</p>
+                      <h3>Invoices</h3>
+                    </div>
+                  </div>
+                  <div class="list-table" id="invoice-list"></div>
+                </section>
               </section>
 
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Transactions</p>
-                    <h3>Invoices, bills, and purchasing</h3>
+              <section class="workspace-page" id="page-expenses" data-page="expenses" hidden>
+                <div class="page-grid two-column">
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Master Data</p>
+                        <h3>Vendors</h3>
+                      </div>
+                    </div>
+                    <form class="record-form" id="vendor-form">
+                      <h4>New Vendor</h4>
+                      <label class="field">
+                        <span>Name</span>
+                        <input name="name" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Email</span>
+                        <input name="email" type="email" />
+                      </label>
+                      <button class="primary-button" type="submit">Add Vendor</button>
+                    </form>
+                    <div class="list-table section-spacer" id="vendor-list"></div>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Payables</p>
+                        <h3>New bill</h3>
+                      </div>
+                    </div>
+                    <form class="record-form" id="bill-form">
+                      <h4>Create Bill</h4>
+                      <label class="field">
+                        <span>Vendor</span>
+                        <select name="vendorId" id="bill-vendor" required></select>
+                      </label>
+                      <label class="field">
+                        <span>Description</span>
+                        <input name="description" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Subtotal</span>
+                        <input name="subtotal" type="number" step="0.01" min="0" required />
+                      </label>
+                      <label class="field">
+                        <span>Expense Account</span>
+                        <select name="expenseAccountCode" id="bill-account" required></select>
+                      </label>
+                      <label class="field">
+                        <span>Issue Date</span>
+                        <input name="issueDate" type="date" required />
+                      </label>
+                      <label class="field">
+                        <span>Due Date</span>
+                        <input name="dueDate" type="date" required />
+                      </label>
+                      <label class="field">
+                        <span>Tax Rate</span>
+                        <input name="taxRate" id="bill-tax-rate" type="number" step="0.01" min="0" value="0.13" required />
+                      </label>
+                      <button class="primary-button" type="submit">Create Bill</button>
+                    </form>
+                  </section>
+                </div>
+
+                <div class="page-grid two-column section-spacer">
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Purchasing</p>
+                        <h3>New purchase order</h3>
+                      </div>
+                    </div>
+                    <form class="record-form" id="purchase-order-form">
+                      <h4>Create Purchase Order</h4>
+                      <label class="field">
+                        <span>Vendor</span>
+                        <select name="vendorId" id="po-vendor" required></select>
+                      </label>
+                      <label class="field">
+                        <span>Description</span>
+                        <input name="description" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Amount</span>
+                        <input name="amount" type="number" step="0.01" min="0" required />
+                      </label>
+                      <label class="field">
+                        <span>Expected Date</span>
+                        <input name="expectedDate" type="date" required />
+                      </label>
+                      <button class="primary-button" type="submit">Create PO</button>
+                    </form>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Payables</p>
+                        <h3>Bills</h3>
+                      </div>
+                    </div>
+                    <div class="list-table" id="bill-list"></div>
+                  </section>
+                </div>
+
+                <section class="panel section-spacer">
+                  <div class="panel-header">
+                    <div>
+                      <p class="eyebrow">Purchasing</p>
+                      <h3>Purchase Orders</h3>
+                    </div>
                   </div>
-                </div>
-
-                <div class="form-grid three-up">
-                  <form class="record-form" id="invoice-form">
-                    <h4>New Invoice</h4>
-                    <label class="field">
-                      <span>Client</span>
-                      <select name="clientId" id="invoice-client" required></select>
-                    </label>
-                    <label class="field">
-                      <span>Description</span>
-                      <input name="description" type="text" required />
-                    </label>
-                    <label class="field">
-                      <span>Subtotal</span>
-                      <input name="subtotal" type="number" step="0.01" min="0" required />
-                    </label>
-                    <label class="field">
-                      <span>Issue Date</span>
-                      <input name="issueDate" type="date" required />
-                    </label>
-                    <label class="field">
-                      <span>Due Date</span>
-                      <input name="dueDate" type="date" required />
-                    </label>
-                    <label class="field">
-                      <span>Tax Rate</span>
-                      <input
-                        name="taxRate"
-                        id="invoice-tax-rate"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value="0.13"
-                        required
-                      />
-                    </label>
-                    <button class="primary-button" type="submit">Create Invoice</button>
-                  </form>
-
-                  <form class="record-form" id="bill-form">
-                    <h4>New Bill</h4>
-                    <label class="field">
-                      <span>Vendor</span>
-                      <select name="vendorId" id="bill-vendor" required></select>
-                    </label>
-                    <label class="field">
-                      <span>Description</span>
-                      <input name="description" type="text" required />
-                    </label>
-                    <label class="field">
-                      <span>Subtotal</span>
-                      <input name="subtotal" type="number" step="0.01" min="0" required />
-                    </label>
-                    <label class="field">
-                      <span>Expense Account</span>
-                      <select name="expenseAccountCode" id="bill-account" required></select>
-                    </label>
-                    <label class="field">
-                      <span>Issue Date</span>
-                      <input name="issueDate" type="date" required />
-                    </label>
-                    <label class="field">
-                      <span>Due Date</span>
-                      <input name="dueDate" type="date" required />
-                    </label>
-                    <label class="field">
-                      <span>Tax Rate</span>
-                      <input
-                        name="taxRate"
-                        id="bill-tax-rate"
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        value="0.13"
-                        required
-                      />
-                    </label>
-                    <button class="primary-button" type="submit">Create Bill</button>
-                  </form>
-
-                  <form class="record-form" id="purchase-order-form">
-                    <h4>New Purchase Order</h4>
-                    <label class="field">
-                      <span>Vendor</span>
-                      <select name="vendorId" id="po-vendor" required></select>
-                    </label>
-                    <label class="field">
-                      <span>Description</span>
-                      <input name="description" type="text" required />
-                    </label>
-                    <label class="field">
-                      <span>Amount</span>
-                      <input name="amount" type="number" step="0.01" min="0" required />
-                    </label>
-                    <label class="field">
-                      <span>Expected Date</span>
-                      <input name="expectedDate" type="date" required />
-                    </label>
-                    <button class="primary-button" type="submit">Create PO</button>
-                  </form>
-                </div>
+                  <div class="list-table" id="purchase-order-list"></div>
+                </section>
               </section>
 
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">General Ledger</p>
-                    <h3>Accounts and journals</h3>
-                  </div>
+              <section class="workspace-page" id="page-ledger" data-page="ledger" hidden>
+                <div class="page-grid two-column">
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">General Ledger</p>
+                        <h3>Accounts</h3>
+                      </div>
+                    </div>
+                    <form class="record-form" id="account-form">
+                      <h4>New Account</h4>
+                      <label class="field">
+                        <span>Code</span>
+                        <input name="code" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Name</span>
+                        <input name="name" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Type</span>
+                        <select name="type" required>
+                          <option value="asset">Asset</option>
+                          <option value="liability">Liability</option>
+                          <option value="equity">Equity</option>
+                          <option value="revenue">Revenue</option>
+                          <option value="expense">Expense</option>
+                        </select>
+                      </label>
+                      <button class="primary-button" type="submit">Add Account</button>
+                    </form>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Journals</p>
+                        <h3>Manual entry</h3>
+                      </div>
+                    </div>
+                    <form class="record-form" id="journal-form">
+                      <h4>Post Journal</h4>
+                      <label class="field">
+                        <span>Memo</span>
+                        <input name="memo" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Amount</span>
+                        <input name="amount" type="number" step="0.01" min="0" required />
+                      </label>
+                      <label class="field">
+                        <span>Debit Account</span>
+                        <select name="debitAccountCode" id="journal-debit" required></select>
+                      </label>
+                      <label class="field">
+                        <span>Credit Account</span>
+                        <select name="creditAccountCode" id="journal-credit" required></select>
+                      </label>
+                      <label class="field">
+                        <span>Date</span>
+                        <input name="date" type="date" required />
+                      </label>
+                      <button class="primary-button" type="submit">Post Journal</button>
+                    </form>
+                  </section>
                 </div>
 
-                <div class="form-grid two-up">
-                  <form class="record-form" id="account-form">
-                    <h4>New Account</h4>
-                    <label class="field">
-                      <span>Code</span>
-                      <input name="code" type="text" required />
-                    </label>
-                    <label class="field">
-                      <span>Name</span>
-                      <input name="name" type="text" required />
-                    </label>
-                    <label class="field">
-                      <span>Type</span>
-                      <select name="type" required>
-                        <option value="asset">Asset</option>
-                        <option value="liability">Liability</option>
-                        <option value="equity">Equity</option>
-                        <option value="revenue">Revenue</option>
-                        <option value="expense">Expense</option>
-                      </select>
-                    </label>
-                    <button class="primary-button" type="submit">Add Account</button>
-                  </form>
+                <div class="page-grid two-column section-spacer">
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">General Ledger</p>
+                        <h3>Chart of Accounts</h3>
+                      </div>
+                    </div>
+                    <div class="list-table" id="account-list"></div>
+                  </section>
 
-                  <form class="record-form" id="journal-form">
-                    <h4>Manual Journal</h4>
-                    <label class="field">
-                      <span>Memo</span>
-                      <input name="memo" type="text" required />
-                    </label>
-                    <label class="field">
-                      <span>Amount</span>
-                      <input name="amount" type="number" step="0.01" min="0" required />
-                    </label>
-                    <label class="field">
-                      <span>Debit Account</span>
-                      <select name="debitAccountCode" id="journal-debit" required></select>
-                    </label>
-                    <label class="field">
-                      <span>Credit Account</span>
-                      <select name="creditAccountCode" id="journal-credit" required></select>
-                    </label>
-                    <label class="field">
-                      <span>Date</span>
-                      <input name="date" type="date" required />
-                    </label>
-                    <button class="primary-button" type="submit">Post Journal</button>
-                  </form>
-                </div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Phase 3</p>
-                    <h3>Banking and sync</h3>
-                  </div>
-                  <div class="row-actions">
-                    <button class="ghost-button" id="sync-bank" type="button">Sync Bank</button>
-                    <button class="ghost-button" id="connect-bank" type="button">Connect RBC</button>
-                  </div>
-                </div>
-                <div class="summary-grid compact" id="bank-summary-grid"></div>
-                <div class="list-table" id="bank-accounts"></div>
-                <form class="record-form" id="bank-transaction-form">
-                  <h4>Import Bank Transaction</h4>
-                  <label class="field">
-                    <span>Account Name</span>
-                    <input name="accountName" type="text" required />
-                  </label>
-                  <label class="field">
-                    <span>Posted Date</span>
-                    <input name="postedDate" type="date" required />
-                  </label>
-                  <label class="field">
-                    <span>Description</span>
-                    <input name="description" type="text" required />
-                  </label>
-                  <label class="field">
-                    <span>Amount</span>
-                    <input name="amount" type="number" step="0.01" required />
-                  </label>
-                  <p class="helper-text">Use positive amounts for deposits and negative amounts for withdrawals.</p>
-                  <button class="primary-button" type="submit">Import Transaction</button>
-                </form>
-              </section>
-
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Phase 2</p>
-                    <h3>Recurring transactions</h3>
-                  </div>
-                </div>
-
-                <form class="record-form" id="recurring-form">
-                  <h4>New Recurring Template</h4>
-                  <label class="field">
-                    <span>Type</span>
-                    <select name="type" id="recurring-type" required>
-                      <option value="invoice">Invoice</option>
-                      <option value="bill">Bill</option>
-                    </select>
-                  </label>
-                  <label class="field">
-                    <span>Client</span>
-                    <select name="clientId" id="recurring-client"></select>
-                  </label>
-                  <label class="field">
-                    <span>Vendor</span>
-                    <select name="vendorId" id="recurring-vendor"></select>
-                  </label>
-                  <label class="field">
-                    <span>Label</span>
-                    <input name="label" type="text" required />
-                  </label>
-                  <label class="field">
-                    <span>Description</span>
-                    <input name="description" type="text" required />
-                  </label>
-                  <label class="field">
-                    <span>Subtotal</span>
-                    <input name="subtotal" type="number" step="0.01" min="0" required />
-                  </label>
-                  <label class="field">
-                    <span>Tax Rate</span>
-                    <input name="taxRate" id="recurring-tax-rate" type="number" step="0.01" min="0" required />
-                  </label>
-                  <label class="field">
-                    <span>Next Date</span>
-                    <input name="nextDate" type="date" required />
-                  </label>
-                  <label class="field">
-                    <span>Expense Account</span>
-                    <select name="expenseAccountCode" id="recurring-expense-account"></select>
-                  </label>
-                  <button class="primary-button" type="submit">Save Template</button>
-                </form>
-              </section>
-            </div>
-
-            <div class="stack">
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Receivables</p>
-                    <h3>Invoices</h3>
-                  </div>
-                </div>
-                <div class="list-table" id="invoice-list"></div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Payables</p>
-                    <h3>Bills</h3>
-                  </div>
-                </div>
-                <div class="list-table" id="bill-list"></div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Purchasing</p>
-                    <h3>Purchase Orders</h3>
-                  </div>
-                </div>
-                <div class="list-table" id="purchase-order-list"></div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">General Ledger</p>
-                    <h3>Chart of Accounts</h3>
-                  </div>
-                </div>
-                <div class="list-table" id="account-list"></div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Journals</p>
-                    <h3>Recent Entries</h3>
-                  </div>
-                </div>
-                <div class="list-table" id="journal-list"></div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Phase 3</p>
-                    <h3>Reconciliation queue</h3>
-                  </div>
-                </div>
-                <div class="list-table" id="bank-reconciliation-list"></div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Phase 3</p>
-                    <h3>Cashflow timeline</h3>
-                  </div>
-                </div>
-                <div class="list-table" id="bank-timeline-list"></div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Phase 3</p>
-                    <h3>Bank transactions</h3>
-                  </div>
-                </div>
-                <div class="list-table" id="bank-transaction-list"></div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Tax and Reporting</p>
-                    <h3>Books position</h3>
-                  </div>
-                </div>
-                <div class="summary-grid compact" id="tax-grid"></div>
-                <div class="report-grid" id="report-grid"></div>
-              </section>
-
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Workflow Depth</p>
-                    <h3>Recurring, close, and exports</h3>
-                  </div>
-                </div>
-                <div class="list-table" id="recurring-list"></div>
-                <div class="list-table" id="checklist-list"></div>
-                <div class="export-links">
-                  <a class="ghost-button" href="/exports/invoices.csv" target="_blank" rel="noreferrer">Export Invoices CSV</a>
-                  <a class="ghost-button" href="/exports/bills.csv" target="_blank" rel="noreferrer">Export Bills CSV</a>
-                  <a class="ghost-button" href="/exports/journals.csv" target="_blank" rel="noreferrer">Export Journals CSV</a>
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Journals</p>
+                        <h3>Recent Entries</h3>
+                      </div>
+                    </div>
+                    <div class="list-table" id="journal-list"></div>
+                  </section>
                 </div>
               </section>
 
-              <section class="panel">
-                <div class="panel-header">
-                  <div>
-                    <p class="eyebrow">Master Lists</p>
-                    <h3>Clients and Vendors</h3>
+              <section class="workspace-page" id="page-banking" data-page="banking" hidden>
+                <section class="panel">
+                  <div class="panel-header">
+                    <div>
+                      <p class="eyebrow">Phase 3</p>
+                      <h3>Banking and sync</h3>
+                    </div>
+                    <div class="row-actions">
+                      <button class="ghost-button" id="sync-bank" type="button">Sync Bank</button>
+                      <button class="ghost-button" id="connect-bank" type="button">Connect RBC</button>
+                    </div>
                   </div>
+                  <div class="summary-grid compact" id="bank-summary-grid"></div>
+                </section>
+
+                <div class="page-grid two-column section-spacer">
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Bank Accounts</p>
+                        <h3>Connected balances</h3>
+                      </div>
+                    </div>
+                    <div class="list-table" id="bank-accounts"></div>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Import</p>
+                        <h3>Manual bank transaction</h3>
+                      </div>
+                    </div>
+                    <form class="record-form" id="bank-transaction-form">
+                      <h4>Import Bank Transaction</h4>
+                      <label class="field">
+                        <span>Account Name</span>
+                        <input name="accountName" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Posted Date</span>
+                        <input name="postedDate" type="date" required />
+                      </label>
+                      <label class="field">
+                        <span>Description</span>
+                        <input name="description" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Amount</span>
+                        <input name="amount" type="number" step="0.01" required />
+                      </label>
+                      <p class="helper-text">Use positive amounts for deposits and negative amounts for withdrawals.</p>
+                      <button class="primary-button" type="submit">Import Transaction</button>
+                    </form>
+                  </section>
                 </div>
-                <div class="dual-list">
-                  <div>
-                    <h4>Clients</h4>
-                    <div class="list-table" id="client-list"></div>
+
+                <div class="page-grid two-column section-spacer">
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Reconciliation</p>
+                        <h3>Exception queue</h3>
+                      </div>
+                    </div>
+                    <div class="list-table" id="bank-reconciliation-list"></div>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Transactions</p>
+                        <h3>Bank activity</h3>
+                      </div>
+                    </div>
+                    <div class="list-table" id="bank-transaction-list"></div>
+                  </section>
+                </div>
+              </section>
+
+              <section class="workspace-page" id="page-automation" data-page="automation" hidden>
+                <div class="page-grid two-column">
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Phase 2</p>
+                        <h3>Recurring transactions</h3>
+                      </div>
+                    </div>
+                    <form class="record-form" id="recurring-form">
+                      <h4>New Recurring Template</h4>
+                      <label class="field">
+                        <span>Type</span>
+                        <select name="type" id="recurring-type" required>
+                          <option value="invoice">Invoice</option>
+                          <option value="bill">Bill</option>
+                        </select>
+                      </label>
+                      <label class="field">
+                        <span>Client</span>
+                        <select name="clientId" id="recurring-client"></select>
+                      </label>
+                      <label class="field">
+                        <span>Vendor</span>
+                        <select name="vendorId" id="recurring-vendor"></select>
+                      </label>
+                      <label class="field">
+                        <span>Label</span>
+                        <input name="label" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Description</span>
+                        <input name="description" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Subtotal</span>
+                        <input name="subtotal" type="number" step="0.01" min="0" required />
+                      </label>
+                      <label class="field">
+                        <span>Tax Rate</span>
+                        <input name="taxRate" id="recurring-tax-rate" type="number" step="0.01" min="0" required />
+                      </label>
+                      <label class="field">
+                        <span>Next Date</span>
+                        <input name="nextDate" type="date" required />
+                      </label>
+                      <label class="field">
+                        <span>Expense Account</span>
+                        <select name="expenseAccountCode" id="recurring-expense-account"></select>
+                      </label>
+                      <button class="primary-button" type="submit">Save Template</button>
+                    </form>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Workflow Depth</p>
+                        <h3>Recurring templates</h3>
+                      </div>
+                    </div>
+                    <div class="list-table" id="recurring-list"></div>
+                  </section>
+                </div>
+
+                <section class="panel section-spacer">
+                  <div class="panel-header">
+                    <div>
+                      <p class="eyebrow">Close and Export</p>
+                      <h3>Checklist and exports</h3>
+                    </div>
                   </div>
-                  <div>
-                    <h4>Vendors</h4>
-                    <div class="list-table" id="vendor-list"></div>
+                  <div class="list-table" id="checklist-list"></div>
+                  <div class="export-links">
+                    <a class="ghost-button" href="/exports/invoices.csv" target="_blank" rel="noreferrer">Export Invoices CSV</a>
+                    <a class="ghost-button" href="/exports/bills.csv" target="_blank" rel="noreferrer">Export Bills CSV</a>
+                    <a class="ghost-button" href="/exports/journals.csv" target="_blank" rel="noreferrer">Export Journals CSV</a>
                   </div>
+                </section>
+              </section>
+
+              <section class="workspace-page" id="page-settings" data-page="settings" hidden>
+                <div class="page-grid two-column">
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Phase 1</p>
+                        <h3>Company setup</h3>
+                      </div>
+                    </div>
+                    <form class="record-form" id="company-form">
+                      <h4>Company Settings</h4>
+                      <label class="field">
+                        <span>Business Name</span>
+                        <input name="name" id="company-name-input" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Currency</span>
+                        <input name="currency" id="company-currency-input" type="text" maxlength="3" required />
+                      </label>
+                      <label class="field">
+                        <span>Tax Label</span>
+                        <input name="taxName" id="company-tax-name-input" type="text" required />
+                      </label>
+                      <label class="field">
+                        <span>Default Tax Rate</span>
+                        <input name="defaultTaxRate" id="company-tax-rate-input" type="number" step="0.01" min="0" required />
+                      </label>
+                      <button class="primary-button" type="submit">Save Settings</button>
+                    </form>
+                  </section>
+
+                  <section class="panel">
+                    <div class="panel-header">
+                      <div>
+                        <p class="eyebrow">Reference</p>
+                        <h3>Master lists</h3>
+                      </div>
+                    </div>
+                    <div class="dual-list">
+                      <div>
+                        <h4>Clients</h4>
+                        <div class="list-table" id="settings-client-list"></div>
+                      </div>
+                      <div>
+                        <h4>Vendors</h4>
+                        <div class="list-table" id="settings-vendor-list"></div>
+                      </div>
+                    </div>
+                  </section>
                 </div>
               </section>
             </div>

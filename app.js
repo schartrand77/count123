@@ -1,4 +1,4 @@
-const state = { app: null, bank: null };
+const state = { app: null, bank: null, activePage: "dashboard", sidebarCollapsed: false };
 
 const el = {
   adminBadge: document.getElementById("admin-badge"),
@@ -11,6 +11,8 @@ const el = {
   adminMessage: document.getElementById("admin-message"),
   authPanel: document.getElementById("auth-panel"),
   workspace: document.getElementById("workspace"),
+  workspaceShell: document.getElementById("workspace-shell"),
+  sidebarToggle: document.getElementById("sidebar-toggle"),
   companyName: document.getElementById("company-name"),
   summaryGrid: document.getElementById("summary-grid"),
   bankSummaryGrid: document.getElementById("bank-summary-grid"),
@@ -27,6 +29,8 @@ const el = {
   reportGrid: document.getElementById("report-grid"),
   clientList: document.getElementById("client-list"),
   vendorList: document.getElementById("vendor-list"),
+  settingsClientList: document.getElementById("settings-client-list"),
+  settingsVendorList: document.getElementById("settings-vendor-list"),
   recurringList: document.getElementById("recurring-list"),
   checklistList: document.getElementById("checklist-list"),
   syncBankButton: document.getElementById("sync-bank"),
@@ -48,6 +52,8 @@ const el = {
   invoiceTaxRateInput: document.getElementById("invoice-tax-rate"),
   billTaxRateInput: document.getElementById("bill-tax-rate"),
   recurringTaxRateInput: document.getElementById("recurring-tax-rate"),
+  pageButtons: Array.from(document.querySelectorAll(".sidebar-tab[data-page]")),
+  pagePanels: Array.from(document.querySelectorAll(".workspace-page[data-page]")),
 };
 
 function currency(value) {
@@ -87,6 +93,39 @@ function empty(target, message) {
 
 function today() {
   return new Date().toISOString().slice(0, 10);
+}
+
+function setActivePage(page) {
+  state.activePage = page;
+  localStorage.setItem("count123:active-page", page);
+
+  el.pageButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.page === page);
+  });
+
+  el.pagePanels.forEach((panel) => {
+    const isActive = panel.dataset.page === page;
+    panel.hidden = !isActive;
+    panel.classList.toggle("is-active", isActive);
+  });
+}
+
+function applySidebarState() {
+  el.workspaceShell.classList.toggle("sidebar-collapsed", state.sidebarCollapsed);
+  el.sidebarToggle.textContent = state.sidebarCollapsed ? "Expand" : "Collapse";
+}
+
+function initializeWorkspaceChrome() {
+  const savedPage = localStorage.getItem("count123:active-page");
+  const savedSidebarState = localStorage.getItem("count123:sidebar-collapsed");
+
+  if (savedPage && el.pagePanels.some((panel) => panel.dataset.page === savedPage)) {
+    state.activePage = savedPage;
+  }
+
+  state.sidebarCollapsed = savedSidebarState === "true";
+  applySidebarState();
+  setActivePage(state.activePage);
 }
 
 function setAdminUi(adminStatus) {
@@ -354,35 +393,36 @@ function renderTaxAndReports() {
 }
 
 function renderMasterLists() {
-  if (!state.app.clients.length) {
-    empty(el.clientList, "No clients yet.");
-  } else {
-    el.clientList.innerHTML = state.app.clients
-      .map(
-        (client) => `
-          <article class="mini-row">
-            <strong>${escapeHtml(client.name)}</strong>
-            <small>${escapeHtml(client.email || "No email")}</small>
-          </article>
-        `
-      )
-      .join("");
-  }
+  const clientHtml = !state.app.clients.length
+    ? `<p class="empty-state">No clients yet.</p>`
+    : state.app.clients
+        .map(
+          (client) => `
+            <article class="mini-row">
+              <strong>${escapeHtml(client.name)}</strong>
+              <small>${escapeHtml(client.email || "No email")}</small>
+            </article>
+          `
+        )
+        .join("");
 
-  if (!state.app.vendors.length) {
-    empty(el.vendorList, "No vendors yet.");
-  } else {
-    el.vendorList.innerHTML = state.app.vendors
-      .map(
-        (vendor) => `
-          <article class="mini-row">
-            <strong>${escapeHtml(vendor.name)}</strong>
-            <small>${escapeHtml(vendor.email || "No email")}</small>
-          </article>
-        `
-      )
-      .join("");
-  }
+  const vendorHtml = !state.app.vendors.length
+    ? `<p class="empty-state">No vendors yet.</p>`
+    : state.app.vendors
+        .map(
+          (vendor) => `
+            <article class="mini-row">
+              <strong>${escapeHtml(vendor.name)}</strong>
+              <small>${escapeHtml(vendor.email || "No email")}</small>
+            </article>
+          `
+        )
+        .join("");
+
+  el.clientList.innerHTML = clientHtml;
+  el.settingsClientList.innerHTML = clientHtml;
+  el.vendorList.innerHTML = vendorHtml;
+  el.settingsVendorList.innerHTML = vendorHtml;
 }
 
 function renderBank() {
@@ -789,6 +829,18 @@ el.bankTransactionForm.addEventListener("submit", async (event) => {
   }));
 });
 
+el.pageButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    setActivePage(button.dataset.page);
+  });
+});
+
+el.sidebarToggle.addEventListener("click", () => {
+  state.sidebarCollapsed = !state.sidebarCollapsed;
+  localStorage.setItem("count123:sidebar-collapsed", String(state.sidebarCollapsed));
+  applySidebarState();
+});
+
 document.body.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-action]");
   if (!button) {
@@ -960,6 +1012,7 @@ el.syncBankButton.addEventListener("click", async () => {
 
 async function initialize() {
   try {
+    initializeWorkspaceChrome();
     const adminStatus = await api("/api/admin/status", { method: "GET", headers: {} });
     setAdminUi(adminStatus);
     if (adminStatus.authenticated) {

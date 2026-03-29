@@ -272,6 +272,122 @@ button {
   gap: 18px;
 }
 
+.workspace-shell {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.workspace-main {
+  min-width: 0;
+}
+
+.workspace-page {
+  display: grid;
+  gap: 18px;
+}
+
+.page-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.page-grid.two-column {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.section-spacer {
+  margin-top: 18px;
+}
+
+.sidebar {
+  position: sticky;
+  top: 18px;
+  display: grid;
+  gap: 16px;
+  padding: 14px;
+}
+
+.sidebar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.sidebar-title {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.sidebar-toggle {
+  padding: 8px 12px;
+}
+
+.sidebar-nav {
+  display: grid;
+  gap: 8px;
+}
+
+.sidebar-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  text-align: left;
+}
+
+.sidebar-tab.is-active {
+  background: rgba(127, 217, 185, 0.14);
+  border-color: rgba(127, 217, 185, 0.35);
+}
+
+.tab-icon {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.tab-label {
+  white-space: nowrap;
+}
+
+.sidebar-collapsed {
+  grid-template-columns: 92px minmax(0, 1fr);
+}
+
+.sidebar-collapsed .sidebar-header {
+  justify-content: center;
+}
+
+.sidebar-collapsed .sidebar-title,
+.sidebar-collapsed .sidebar .eyebrow,
+.sidebar-collapsed .tab-label {
+  display: none;
+}
+
+.sidebar-collapsed .sidebar-toggle {
+  width: 100%;
+  padding: 8px 0;
+}
+
+.sidebar-collapsed .sidebar-tab {
+  justify-content: center;
+  padding: 10px 0;
+}
+
 .list-table {
   display: grid;
   gap: 10px;
@@ -389,6 +505,8 @@ button {
 
 @media (max-width: 1180px) {
   .workspace-layout,
+  .workspace-shell,
+  .page-grid.two-column,
   .form-grid.three-up,
   .summary-grid,
   .summary-grid.compact,
@@ -409,8 +527,10 @@ button {
 
   .topbar,
   .workspace-layout,
+  .workspace-shell,
   .summary-grid,
   .summary-grid.compact,
+  .page-grid.two-column,
   .form-grid.three-up,
   .report-grid,
   .table-row {
@@ -439,5 +559,9 @@ button {
 
   .row-actions {
     justify-content: flex-start;
+  }
+
+  .sidebar {
+    position: static;
   }
 }
