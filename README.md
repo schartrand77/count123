@@ -4,6 +4,8 @@ Count123 is an accounting software concept for Canadian small businesses, with a
 
 This repo now includes a server-side bank integration scaffold for Royal Bank of Canada (RBC) so OAuth credentials and account-sync calls stay off the frontend.
 
+It is not possible to honestly guarantee a web app is "100% secure and compliant." This repo is hardened to a stronger baseline, but real compliance still depends on hosting, legal scope, data handling, monitoring, and the bank's production requirements.
+
 ## What is in this repo
 
 - A dependency-free frontend starter app
@@ -27,6 +29,7 @@ Then open `http://localhost:8087`.
 
 1. Copy [`.env.example`](./.env.example) to `.env`.
 2. Fill in the RBC OAuth values for your developer application:
+   - `SESSION_SECRET`
    - `RBC_CLIENT_ID`
    - `RBC_CLIENT_SECRET`
    - `RBC_AUTH_URL`
@@ -34,12 +37,33 @@ Then open `http://localhost:8087`.
    - `RBC_REDIRECT_URI`
    - `RBC_SCOPES`
    - `RBC_ACCOUNTS_URL`
+   - `TRUST_PROXY=true` if TLS is terminated by a reverse proxy
+   - `FORCE_HTTPS=true` in production
 3. Ensure the redirect URI registered in RBC matches `RBC_REDIRECT_URI`.
 4. Start the app and use the `Connect RBC` action in the dashboard.
 
 Count123 assumes the integration target is RBC via the official developer portal: https://developer.rbc.com/
 
 Because RBC endpoint details and credentials are app-specific, this repo ships a secure integration scaffold rather than hardcoded production endpoints.
+
+## Security baseline in this repo
+
+- Signed, per-user `HttpOnly` session cookies instead of a single shared process session
+- OAuth state validation plus PKCE for the RBC authorization flow
+- Security headers including CSP, HSTS when HTTPS is enabled, `X-Frame-Options`, `nosniff`, and restrictive referrer and permissions policies
+- No bank credentials or tokens exposed to frontend JavaScript
+- Masked bank account identifiers in the UI response payload
+- Reduced error disclosure on callback and sync failures
+- No third-party font or asset dependencies in the default HTML
+
+## Remaining production requirements
+
+- TLS everywhere, including reverse proxy and origin configuration
+- Secret management outside `.env` for production
+- Audit logging, alerting, and incident response
+- Privacy policy, retention policy, and access control review
+- Bank-specific security review and any contractual compliance obligations from RBC
+- Penetration testing and dependency/container scanning in CI
 
 ## Deploy on Unraid
 

@@ -5,6 +5,13 @@ const crypto = require("node:crypto");
 
 const PORT = Number(process.env.PORT || 80);
 const ROOT = __dirname;
+const SESSION_COOKIE_NAME = "count123_sid";
+const SESSION_TTL_MS = 60 * 60 * 1000;
+const SESSION_SECRET =
+  process.env.SESSION_SECRET || crypto.randomBytes(32).toString("hex");
+const TRUST_PROXY = process.env.TRUST_PROXY === "true";
+const FORCE_HTTPS = process.env.FORCE_HTTPS === "true";
+const ALLOW_INSECURE_BANK_URLS = process.env.ALLOW_INSECURE_BANK_URLS === "true";
 
 const CONTENT_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -18,15 +25,201 @@ const CONTENT_TYPES = {
   ".ico": "image/x-icon",
 };
 
-const session = {
-  state: null,
-  accessToken: null,
-  refreshToken: null,
-  tokenType: "Bearer",
-  expiresAt: null,
-  accounts: [],
-  lastSyncAt: null,
-};
+const sessions = new Map();
+
+function now() {
+  return Date.now();
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function parseCookies(req) {
+  const header = req.headers.cookie;
+
+  if (!header) {
+    return {};
+  }
+
+  return header.split(";").reduce((cookies, part) => {
+    const [rawName, ...rawValue] = part.trim().split("=");
+
+    if (!rawName) {
+      return cookies;
+    }
+
+    cookies[rawName] = decodeURIComponent(rawValue.join("=") || "");
+    return cookies;
+  }, {});
+}
+
+function sign(value) {
+  return crypto
+    .createHmac("sha256", SESSION_SECRET)
+    .update(value)
+    .digest("base64url");
+}
+
+function buildSessionCookie(sessionId, req) {
+  const isSecure = isSecureRequest(req);
+  const signedValue = `${sessionId}.${sign(sessionId)}`;
+  const parts = [
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(signedValue)}`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    `Max-Age=${Math.floor(SESSION_TTL_MS / 1000)}`,
+  ];
+
+  if (isSecure || FORCE_HTTPS) {
+    parts.push("Secure");
+  }
+
+  return parts.join("; ");
+}
+
+function buildExpiredCookie(req) {
+  const isSecure = isSecureRequest(req);
+  const parts = [
+    `${SESSION_COOKIE_NAME}=`,
+    "Path=/",
+    "HttpOnly",
+    "SameSite=Lax",
+    "Max-Age=0",
+  ];
+
+  if (isSecure || FORCE_HTTPS) {
+    parts.push("Secure");
+  }
+
+  return parts.join("; ");
+}
+
+function createSession() {
+  const sessionId = crypto.randomUUID();
+  const session = {
+    id: sessionId,
+    createdAt: now(),
+    updatedAt: now(),
+    oauthState: null,
+    codeVerifier: null,
+    accessToken: null,
+    refreshToken: null,
+    tokenType: "Bearer",
+    expiresAt: null,
+    accounts: [],
+    lastSyncAt: null,
+  };
+
+  sessions.set(sessionId, session);
+  return session;
+}
+
+function getSessionFromRequest(req) {
+  const cookieValue = parseCookies(req)[SESSION_COOKIE_NAME];
+
+  if (!cookieValue) {
+    return null;
+  }
+
+  const [sessionId, signature] = cookieValue.split(".");
+
+  if (!sessionId || !signature || sign(sessionId) !== signature) {
+    return null;
+  }
+
+  const session = sessions.get(sessionId);
+
+  if (!session) {
+    return null;
+  }
+
+  if (now() - session.updatedAt > SESSION_TTL_MS) {
+    sessions.delete(sessionId);
+    return null;
+  }
+
+  session.updatedAt = now();
+  return session;
+}
+
+function ensureSession(req, res) {
+  const existing = getSessionFromRequest(req);
+
+  if (existing) {
+    res.setHeader("Set-Cookie", buildSessionCookie(existing.id, req));
+    return existing;
+  }
+
+  const session = createSession();
+  res.setHeader("Set-Cookie", buildSessionCookie(session.id, req));
+  return session;
+}
+
+function clearSession(req, res) {
+  const existing = getSessionFromRequest(req);
+
+  if (existing) {
+    sessions.delete(existing.id);
+  }
+
+  res.setHeader("Set-Cookie", buildExpiredCookie(req));
+}
+
+function cleanupSessions() {
+  const cutoff = now() - SESSION_TTL_MS;
+
+  for (const [id, session] of sessions.entries()) {
+    if (session.updatedAt < cutoff) {
+      sessions.delete(id);
+    }
+  }
+}
+
+function isSecureRequest(req) {
+  if (TRUST_PROXY) {
+    const forwardedProto = req.headers["x-forwarded-proto"];
+
+    if (typeof forwardedProto === "string") {
+      return forwardedProto.split(",")[0].trim() === "https";
+    }
+  }
+
+  return Boolean(req.socket.encrypted);
+}
+
+function getRequestOrigin(req) {
+  const protocol = isSecureRequest(req) ? "https" : "http";
+  return `${protocol}://${req.headers.host}`;
+}
+
+function assertHttpsForSensitiveRoutes(req) {
+  if (FORCE_HTTPS && !isSecureRequest(req)) {
+    throw new Error("HTTPS is required for this route.");
+  }
+}
+
+function validateUrlEnv(name, allowHttp = false) {
+  const value = process.env[name];
+
+  if (!value) {
+    return null;
+  }
+
+  const parsed = new URL(value);
+
+  if (!allowHttp && parsed.protocol !== "https:" && !ALLOW_INSECURE_BANK_URLS) {
+    throw new Error(`${name} must use HTTPS.`);
+  }
+
+  return parsed.toString();
+}
 
 function hasRbcConfig() {
   return Boolean(
@@ -38,17 +231,44 @@ function hasRbcConfig() {
   );
 }
 
-function isConnected() {
-  return Boolean(session.accessToken);
+function isConnected(session) {
+  return Boolean(
+    session.accessToken && (!session.expiresAt || session.expiresAt > now())
+  );
 }
 
-function sendJson(res, statusCode, payload) {
-  res.writeHead(statusCode, { "Content-Type": CONTENT_TYPES[".json"] });
+function buildSecurityHeaders(req, contentType, cacheControl = "no-store") {
+  const headers = {
+    "Content-Type": contentType,
+    "Cache-Control": cacheControl,
+    Pragma: "no-cache",
+    Expires: "0",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+    "Permissions-Policy":
+      "accelerometer=(), camera=(), geolocation=(), gyroscope=(), microphone=(), payment=(), usb=()",
+    "Cross-Origin-Opener-Policy": "same-origin",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Content-Security-Policy":
+      "default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; object-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; upgrade-insecure-requests",
+  };
+
+  if (isSecureRequest(req) || FORCE_HTTPS) {
+    headers["Strict-Transport-Security"] =
+      "max-age=31536000; includeSubDomains";
+  }
+
+  return headers;
+}
+
+function sendJson(req, res, statusCode, payload) {
+  res.writeHead(statusCode, buildSecurityHeaders(req, CONTENT_TYPES[".json"]));
   res.end(JSON.stringify(payload));
 }
 
-function sendHtml(res, statusCode, html) {
-  res.writeHead(statusCode, { "Content-Type": CONTENT_TYPES[".html"] });
+function sendHtml(req, res, statusCode, html) {
+  res.writeHead(statusCode, buildSecurityHeaders(req, CONTENT_TYPES[".html"]));
   res.end(html);
 }
 
@@ -71,20 +291,35 @@ function serveStatic(req, res) {
   const filePath = readStaticFile(`.${requestPath}`);
 
   if (!filePath) {
-    sendJson(res, 404, { error: "Not found" });
+    sendJson(req, res, 404, { error: "Not found" });
     return;
   }
 
   const extension = path.extname(filePath).toLowerCase();
   const contentType = CONTENT_TYPES[extension] || "application/octet-stream";
+  const cacheControl =
+    extension === ".html"
+      ? "no-store"
+      : "public, max-age=300, stale-while-revalidate=300";
 
-  res.writeHead(200, { "Content-Type": contentType });
+  res.writeHead(200, buildSecurityHeaders(req, contentType, cacheControl));
   fs.createReadStream(filePath).pipe(res);
 }
 
-function buildConnectUrl() {
+function base64UrlSha256(value) {
+  return crypto.createHash("sha256").update(value).digest("base64url");
+}
+
+function buildConnectUrl(session) {
+  validateUrlEnv("RBC_AUTH_URL");
+  validateUrlEnv("RBC_REDIRECT_URI", true);
+
   const state = crypto.randomUUID();
-  session.state = state;
+  const codeVerifier = crypto.randomBytes(32).toString("base64url");
+  const codeChallenge = base64UrlSha256(codeVerifier);
+
+  session.oauthState = state;
+  session.codeVerifier = codeVerifier;
 
   const url = new URL(process.env.RBC_AUTH_URL);
   url.searchParams.set("response_type", "code");
@@ -92,17 +327,22 @@ function buildConnectUrl() {
   url.searchParams.set("redirect_uri", process.env.RBC_REDIRECT_URI);
   url.searchParams.set("scope", process.env.RBC_SCOPES || "accounts transactions");
   url.searchParams.set("state", state);
+  url.searchParams.set("code_challenge", codeChallenge);
+  url.searchParams.set("code_challenge_method", "S256");
 
   return url.toString();
 }
 
-async function exchangeCodeForToken(code) {
+async function exchangeCodeForToken(session, code) {
+  validateUrlEnv("RBC_TOKEN_URL");
+
   const body = new URLSearchParams({
     grant_type: "authorization_code",
     code,
     redirect_uri: process.env.RBC_REDIRECT_URI,
     client_id: process.env.RBC_CLIENT_ID,
     client_secret: process.env.RBC_CLIENT_SECRET,
+    code_verifier: session.codeVerifier,
   });
 
   const response = await fetch(process.env.RBC_TOKEN_URL, {
@@ -117,21 +357,29 @@ async function exchangeCodeForToken(code) {
   const payload = await response.json();
 
   if (!response.ok) {
-    throw new Error(payload.error_description || payload.error || "Token exchange failed.");
+    throw new Error("Token exchange failed.");
+  }
+
+  if (!payload.access_token) {
+    throw new Error("RBC did not return an access token.");
   }
 
   session.accessToken = payload.access_token;
   session.refreshToken = payload.refresh_token || null;
   session.tokenType = payload.token_type || "Bearer";
   session.expiresAt = payload.expires_in
-    ? Date.now() + Number(payload.expires_in) * 1000
+    ? now() + Number(payload.expires_in) * 1000
     : null;
+  session.oauthState = null;
+  session.codeVerifier = null;
 }
 
-async function fetchRbcAccounts() {
+async function fetchRbcAccounts(session) {
   if (!process.env.RBC_ACCOUNTS_URL) {
     return [];
   }
+
+  validateUrlEnv("RBC_ACCOUNTS_URL");
 
   const response = await fetch(process.env.RBC_ACCOUNTS_URL, {
     headers: {
@@ -143,7 +391,7 @@ async function fetchRbcAccounts() {
   const payload = await response.json();
 
   if (!response.ok) {
-    throw new Error(payload.error_description || payload.error || "Accounts sync failed.");
+    throw new Error("Accounts sync failed.");
   }
 
   const accounts = Array.isArray(payload)
@@ -152,29 +400,34 @@ async function fetchRbcAccounts() {
       ? payload.accounts
       : [];
 
-  session.accounts = accounts.map((account) => ({
-    id: account.id || account.accountId || account.number || null,
-    name: account.name || account.nickname || account.productName || "Business account",
-    type: account.type || account.accountType || account.category || "Business account",
-    balance:
-      account.balance?.current ||
-      account.currentBalance ||
-      account.ledgerBalance ||
-      account.balance ||
-      null,
-    availableBalance: account.availableBalance || account.balance?.available || null,
-    currency: account.currency || account.currencyCode || "CAD",
-  }));
+  session.accounts = accounts.map((account) => {
+    const rawId = account.id || account.accountId || account.number || null;
+
+    return {
+      id: rawId ? `****${String(rawId).slice(-4)}` : null,
+      name: account.name || account.nickname || account.productName || "Business account",
+      type: account.type || account.accountType || account.category || "Business account",
+      balance:
+        account.balance?.current ||
+        account.currentBalance ||
+        account.ledgerBalance ||
+        account.balance ||
+        null,
+      availableBalance: account.availableBalance || account.balance?.available || null,
+      currency: account.currency || account.currencyCode || "CAD",
+    };
+  });
   session.lastSyncAt = new Date().toISOString();
+  session.updatedAt = now();
 
   return session.accounts;
 }
 
-function getStatusPayload() {
+function getStatusPayload(session) {
   return {
     provider: "RBC",
     configured: hasRbcConfig(),
-    connected: isConnected(),
+    connected: isConnected(session),
     expiresAt: session.expiresAt,
     lastSyncAt: session.lastSyncAt,
     accounts: session.accounts,
@@ -182,61 +435,77 @@ function getStatusPayload() {
 }
 
 async function handleApi(req, res) {
-  const url = new URL(req.url, `http://${req.headers.host}`);
+  const url = new URL(req.url, getRequestOrigin(req));
+  const session = ensureSession(req, res);
 
   if (url.pathname === "/api/rbc/status" && req.method === "GET") {
-    sendJson(res, 200, getStatusPayload());
+    sendJson(req, res, 200, getStatusPayload(session));
+    return;
+  }
+
+  if (url.pathname === "/api/rbc/disconnect" && req.method === "POST") {
+    clearSession(req, res);
+    sendJson(req, res, 200, { disconnected: true });
     return;
   }
 
   if (url.pathname === "/api/rbc/connect-url" && req.method === "GET") {
+    assertHttpsForSensitiveRoutes(req);
+
     if (!hasRbcConfig()) {
-      sendJson(res, 400, {
-        error: "RBC API is not configured. Set RBC_CLIENT_ID, RBC_CLIENT_SECRET, RBC_AUTH_URL, RBC_TOKEN_URL, and RBC_REDIRECT_URI.",
+      sendJson(req, res, 400, {
+        error:
+          "RBC API is not configured. Set RBC_CLIENT_ID, RBC_CLIENT_SECRET, RBC_AUTH_URL, RBC_TOKEN_URL, RBC_REDIRECT_URI, and SESSION_SECRET.",
       });
       return;
     }
 
-    sendJson(res, 200, { url: buildConnectUrl() });
+    sendJson(req, res, 200, { url: buildConnectUrl(session) });
     return;
   }
 
   if (url.pathname === "/api/rbc/callback" && req.method === "GET") {
+    assertHttpsForSensitiveRoutes(req);
+
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
     const error = url.searchParams.get("error");
 
     if (error) {
       sendHtml(
+        req,
         res,
         400,
-        `<h1>RBC connection failed</h1><p>${error}</p><p><a href="/">Return to Count123</a></p>`
+        `<h1>RBC connection failed</h1><p>The bank returned an error.</p><p><a href="/">Return to Count123</a></p>`
       );
       return;
     }
 
-    if (!code || !state || state !== session.state) {
+    if (!code || !state || state !== session.oauthState || !session.codeVerifier) {
       sendHtml(
+        req,
         res,
         400,
-        "<h1>Invalid RBC callback</h1><p>The OAuth state or authorization code was missing.</p><p><a href=\"/\">Return to Count123</a></p>"
+        "<h1>Invalid RBC callback</h1><p>The OAuth state, PKCE verifier, or authorization code was invalid.</p><p><a href=\"/\">Return to Count123</a></p>"
       );
       return;
     }
 
     try {
-      await exchangeCodeForToken(code);
-      await fetchRbcAccounts();
+      await exchangeCodeForToken(session, code);
+      await fetchRbcAccounts(session);
       sendHtml(
+        req,
         res,
         200,
-        "<h1>RBC connected</h1><p>Your business accounts have been synced into Count123.</p><p><a href=\"/\">Return to Count123</a></p>"
+        "<h1>RBC connected</h1><p>Your business accounts were synced successfully.</p><p><a href=\"/\">Return to Count123</a></p>"
       );
-    } catch (callbackError) {
+    } catch {
       sendHtml(
+        req,
         res,
         502,
-        `<h1>RBC sync failed</h1><p>${callbackError.message}</p><p><a href="/">Return to Count123</a></p>`
+        "<h1>RBC sync failed</h1><p>The bank token exchange or account sync did not complete successfully.</p><p><a href=\"/\">Return to Count123</a></p>"
       );
     }
 
@@ -244,25 +513,29 @@ async function handleApi(req, res) {
   }
 
   if (url.pathname === "/api/rbc/accounts" && req.method === "GET") {
-    if (!isConnected()) {
-      sendJson(res, 401, { error: "RBC is not connected." });
+    assertHttpsForSensitiveRoutes(req);
+
+    if (!isConnected(session)) {
+      sendJson(req, res, 401, { error: "RBC is not connected." });
       return;
     }
 
     try {
-      const accounts = await fetchRbcAccounts();
-      sendJson(res, 200, { accounts, lastSyncAt: session.lastSyncAt });
-    } catch (accountsError) {
-      sendJson(res, 502, { error: accountsError.message });
+      const accounts = await fetchRbcAccounts(session);
+      sendJson(req, res, 200, { accounts, lastSyncAt: session.lastSyncAt });
+    } catch {
+      sendJson(req, res, 502, { error: "Account sync failed." });
     }
 
     return;
   }
 
-  sendJson(res, 404, { error: "Unknown API route" });
+  sendJson(req, res, 404, { error: "Unknown API route" });
 }
 
 const server = http.createServer(async (req, res) => {
+  cleanupSessions();
+
   try {
     if ((req.url || "").startsWith("/api/")) {
       await handleApi(req, res);
@@ -271,7 +544,9 @@ const server = http.createServer(async (req, res) => {
 
     serveStatic(req, res);
   } catch (error) {
-    sendJson(res, 500, { error: error.message || "Internal server error" });
+    const message =
+      error instanceof Error ? escapeHtml(error.message) : "Internal server error";
+    sendJson(req, res, 500, { error: message });
   }
 });
 
