@@ -1,13 +1,15 @@
 # Count123
 
-Count123 is an opinionated open source accounting software concept with a liquid-glass UI and a product position centered on clarity, speed, and trustworthy bookkeeping workflows.
+Count123 is an accounting software concept for Canadian small businesses, with a liquid-glass UI and a product direction centered on operational efficiency, clean books, and practical tax-season readiness.
+
+This repo now includes a server-side bank integration scaffold for Royal Bank of Canada (RBC) so OAuth credentials and account-sync calls stay off the frontend.
 
 ## What is in this repo
 
 - A dependency-free frontend starter app
 - A liquid-glass design system in plain CSS
-- An interactive accounting dashboard prototype
-- Product framing for the future open source platform
+- An interactive small-business accounting dashboard prototype
+- Product framing for a professional Canadian accounting app
 
 ## Primary deployment target
 
@@ -21,6 +23,24 @@ docker compose up --build -d
 
 Then open `http://localhost:8087`.
 
+## Configure RBC integration
+
+1. Copy [`.env.example`](./.env.example) to `.env`.
+2. Fill in the RBC OAuth values for your developer application:
+   - `RBC_CLIENT_ID`
+   - `RBC_CLIENT_SECRET`
+   - `RBC_AUTH_URL`
+   - `RBC_TOKEN_URL`
+   - `RBC_REDIRECT_URI`
+   - `RBC_SCOPES`
+   - `RBC_ACCOUNTS_URL`
+3. Ensure the redirect URI registered in RBC matches `RBC_REDIRECT_URI`.
+4. Start the app and use the `Connect RBC` action in the dashboard.
+
+Count123 assumes the integration target is RBC via the official developer portal: https://developer.rbc.com/
+
+Because RBC endpoint details and credentials are app-specific, this repo ships a secure integration scaffold rather than hardcoded production endpoints.
+
 ## Deploy on Unraid
 
 1. Place this repo in an Unraid-accessible share, or clone it onto the server.
@@ -29,33 +49,38 @@ Then open `http://localhost:8087`.
 4. Route a host port such as `8087` to container port `80`.
 5. Optionally front it with your reverse proxy and map a custom domain.
 
-The current container is a small nginx image serving the static prototype. As the product grows, this can evolve into a multi-service stack without changing the Unraid deployment model.
+The current container is a small Node image serving the frontend and the server-side bank integration endpoints. As the product grows, this can evolve into a multi-service stack without changing the Unraid deployment model.
 
-## Local non-Docker fallback
+## Local runtime
 
-Because the app is static, any local file server works.
+Because the app now includes secure OAuth and bank-sync endpoints, run the local Node server instead of a static file host.
 
 ```bash
-python -m http.server 4173
+npm start
 ```
 
-Then open `http://localhost:4173`.
+Then open `http://localhost:80`.
 
 ## Product direction
 
 Count123 is being positioned around:
 
-- General ledger as the source of truth
-- Fast journal-entry workflows
+- Clean bookkeeping and balancing workflows
+- Client invoicing and receivables management
+- Purchase orders, bills, and payables handling
+- GST/HST-aware workflows
 - Real-time cash visibility
-- Multi-entity and audit-friendly reporting
-- Open APIs and self-hosting
+- Bank connection and account sync through a secure backend
+- Cleaner accountant handoff at year-end
+- Self-hosted deployment
 
 ## Next build targets
 
-- Authentication and workspace management
-- Chart of accounts CRUD
-- Journal entry posting and approvals
-- Invoice, bill, payment, and reconciliation flows
-- Financial statements and drill-down reporting
+- Client, quote, and invoice management
+- Purchase orders, bills, and payables workflows
+- Receipt capture and expense categorization
+- Reconciliation and month-end close tooling
+- GST/HST tracking and summaries
+- Bank-feed sync and transaction matching
+- Tax-season exports and reporting
 - Import/export and audit trail tooling

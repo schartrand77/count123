@@ -370,6 +370,7 @@ button {
 }
 
 .stats-grid,
+.bank-grid,
 .module-grid,
 .roadmap-grid {
   display: grid;
@@ -381,7 +382,18 @@ button {
   margin-top: 18px;
 }
 
+.bank-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
 .journal-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.bank-accounts {
   display: grid;
   gap: 12px;
   margin-top: 18px;
@@ -395,6 +407,7 @@ button {
 
 .journal-item p,
 .journal-item h5,
+.bank-empty,
 .roadmap-copy,
 .module-card p,
 .task-list,
@@ -408,6 +421,7 @@ button {
 
 .journal-meta,
 .journal-lines,
+.bank-empty,
 .roadmap-copy,
 .module-card p,
 .task-list li,
@@ -502,6 +516,10 @@ button {
 
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bank-grid {
+    grid-template-columns: 1fr;
   }
 
   .section-heading.inline,

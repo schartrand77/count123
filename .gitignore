@@ -1,6 +1,14 @@
 Thumbs.db
 Desktop.ini
 .DS_Store
+.env
+.env.*
+.vscode/
+.idea/
+*.log
+*.tmp
+*.swp
 node_modules/
 dist/
 build/
+coverage/

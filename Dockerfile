@@ -1,8 +1,9 @@
-FROM nginx:1.29-alpine
+FROM node:24-alpine
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
-COPY index.html /usr/share/nginx/html/index.html
-COPY styles.css /usr/share/nginx/html/styles.css
-COPY app.js /usr/share/nginx/html/app.js
+WORKDIR /app
+
+COPY package.json server.js index.html styles.css app.js ./
 
 EXPOSE 80
+
+CMD ["node", "server.js"]

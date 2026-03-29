@@ -3,4 +3,14 @@
 Thumbs.db
 Desktop.ini
 .DS_Store
+.env
+.env.*
+.vscode
+.idea
+node_modules
+dist
+build
+coverage
+*.log
+*.tmp
 README.md
