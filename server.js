@@ -5,6 +5,8 @@ const crypto = require("node:crypto");
 
 const PORT = Number(process.env.PORT || 80);
 const ROOT = __dirname;
+const DATA_DIR = path.join(ROOT, "data");
+const STORE_FILE = path.join(DATA_DIR, "store.json");
 const SESSION_COOKIE_NAME = "count123_sid";
 const SESSION_TTL_MS = 60 * 60 * 1000;
 const SESSION_SECRET =
@@ -27,6 +29,17 @@ const CONTENT_TYPES = {
   ".ico": "image/x-icon",
 };
 
+const DEFAULT_ACCOUNTS = [
+  { code: "1000", name: "Cash", type: "asset" },
+  { code: "1100", name: "Accounts Receivable", type: "asset" },
+  { code: "1150", name: "GST/HST Recoverable", type: "asset" },
+  { code: "2000", name: "Accounts Payable", type: "liability" },
+  { code: "2100", name: "GST/HST Payable", type: "liability" },
+  { code: "3000", name: "Owner Equity", type: "equity" },
+  { code: "4000", name: "Service Revenue", type: "revenue" },
+  { code: "6100", name: "Operating Expense", type: "expense" },
+];
+
 const sessions = new Map();
 const loginAttempts = new Map();
 
@@ -34,14 +47,502 @@ function now() {
   return Date.now();
 }
 
-function pruneLoginAttempts() {
-  const cutoff = now() - LOGIN_WINDOW_MS;
+function ensureDataStore() {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
 
-  for (const [key, attempt] of loginAttempts.entries()) {
-    if (attempt.windowStartedAt < cutoff) {
-      loginAttempts.delete(key);
+  if (!fs.existsSync(STORE_FILE)) {
+    fs.writeFileSync(STORE_FILE, JSON.stringify(defaultStore(), null, 2));
+  }
+}
+
+function defaultStore() {
+  return {
+    company: {
+      name: "Count123",
+      currency: "CAD",
+      taxName: "GST/HST",
+      defaultTaxRate: 0.13,
+    },
+    counters: {
+      client: 0,
+      vendor: 0,
+      account: 0,
+      invoice: 1000,
+      bill: 800,
+      purchaseOrder: 500,
+      journal: 0,
+    },
+    clients: [],
+    vendors: [],
+    accounts: DEFAULT_ACCOUNTS.map((account) => ({
+      id: `acct_${account.code}`,
+      ...account,
+      system: true,
+    })),
+    invoices: [],
+    bills: [],
+    purchaseOrders: [],
+    journalEntries: [],
+  };
+}
+
+function readStore() {
+  ensureDataStore();
+  const raw = fs.readFileSync(STORE_FILE, "utf8");
+  const store = JSON.parse(raw);
+
+  for (const account of DEFAULT_ACCOUNTS) {
+    if (!store.accounts.some((existing) => existing.code === account.code)) {
+      store.accounts.push({
+        id: `acct_${account.code}`,
+        ...account,
+        system: true,
+      });
     }
   }
+
+  return store;
+}
+
+function writeStore(store) {
+  ensureDataStore();
+  fs.writeFileSync(STORE_FILE, JSON.stringify(store, null, 2));
+}
+
+function nextCounter(store, key) {
+  store.counters[key] = Number(store.counters[key] || 0) + 1;
+  return store.counters[key];
+}
+
+function formatSequence(prefix, value) {
+  return `${prefix}-${String(value).padStart(4, "0")}`;
+}
+
+function toCurrencyAmount(value) {
+  const numeric = Number(value || 0);
+  return Math.round(numeric * 100) / 100;
+}
+
+function accountSign(type) {
+  return type === "asset" || type === "expense" ? 1 : -1;
+}
+
+function getAccountMap(store) {
+  return new Map(store.accounts.map((account) => [account.code, account]));
+}
+
+function computeAccountBalances(store) {
+  const accountMap = getAccountMap(store);
+  const balances = new Map(store.accounts.map((account) => [account.code, 0]));
+
+  for (const entry of store.journalEntries) {
+    for (const line of entry.lines) {
+      const account = accountMap.get(line.accountCode);
+
+      if (!account) {
+        continue;
+      }
+
+      const effect =
+        accountSign(account.type) *
+        (toCurrencyAmount(line.debit) - toCurrencyAmount(line.credit));
+
+      balances.set(account.code, toCurrencyAmount((balances.get(account.code) || 0) + effect));
+    }
+  }
+
+  return balances;
+}
+
+function findAccount(store, code) {
+  return store.accounts.find((account) => account.code === code);
+}
+
+function requireAccount(store, code) {
+  const account = findAccount(store, code);
+
+  if (!account) {
+    throw new Error(`Unknown account code: ${code}`);
+  }
+
+  return account;
+}
+
+function sumOutstanding(records) {
+  return toCurrencyAmount(
+    records.reduce((total, record) => total + Number(record.balanceDue || 0), 0)
+  );
+}
+
+function buildReports(store, balances) {
+  const revenue = store.accounts
+    .filter((account) => account.type === "revenue")
+    .reduce((sum, account) => sum + (balances.get(account.code) || 0), 0);
+
+  const expenses = store.accounts
+    .filter((account) => account.type === "expense")
+    .reduce((sum, account) => sum + (balances.get(account.code) || 0), 0);
+
+  const assets = store.accounts
+    .filter((account) => account.type === "asset")
+    .reduce((sum, account) => sum + (balances.get(account.code) || 0), 0);
+
+  const liabilities = store.accounts
+    .filter((account) => account.type === "liability")
+    .reduce((sum, account) => sum + (balances.get(account.code) || 0), 0);
+
+  return {
+    profitAndLoss: {
+      revenue: toCurrencyAmount(revenue),
+      expenses: toCurrencyAmount(expenses),
+      netIncome: toCurrencyAmount(revenue - expenses),
+    },
+    balanceSheet: {
+      assets: toCurrencyAmount(assets),
+      liabilities: toCurrencyAmount(liabilities),
+      equity: toCurrencyAmount(assets - liabilities),
+    },
+  };
+}
+
+function buildTaxSummary(store) {
+  const collected = store.invoices.reduce(
+    (sum, invoice) => sum + Number(invoice.taxAmount || 0),
+    0
+  );
+  const recoverable = store.bills.reduce(
+    (sum, bill) => sum + Number(bill.taxAmount || 0),
+    0
+  );
+
+  return {
+    collected: toCurrencyAmount(collected),
+    recoverable: toCurrencyAmount(recoverable),
+    netRemittance: toCurrencyAmount(collected - recoverable),
+  };
+}
+
+function buildSummary(store, balances) {
+  const reports = buildReports(store, balances);
+  const openInvoices = store.invoices.filter((invoice) => invoice.status !== "paid");
+  const openBills = store.bills.filter((bill) => bill.status !== "paid");
+
+  return {
+    cash: toCurrencyAmount(balances.get("1000") || 0),
+    openInvoices: sumOutstanding(openInvoices),
+    payablesDue: sumOutstanding(openBills),
+    netIncome: reports.profitAndLoss.netIncome,
+    taxPayable: buildTaxSummary(store).netRemittance,
+  };
+}
+
+function buildBootstrapPayload(store, session) {
+  const balances = computeAccountBalances(store);
+  const reports = buildReports(store, balances);
+  const tax = buildTaxSummary(store);
+
+  return {
+    company: store.company,
+    admin: {
+      username: session.adminUsername,
+      email: session.adminEmail,
+    },
+    summary: buildSummary(store, balances),
+    clients: [...store.clients].sort((a, b) => a.name.localeCompare(b.name)),
+    vendors: [...store.vendors].sort((a, b) => a.name.localeCompare(b.name)),
+    accounts: store.accounts
+      .map((account) => ({
+        ...account,
+        balance: toCurrencyAmount(balances.get(account.code) || 0),
+      }))
+      .sort((a, b) => a.code.localeCompare(b.code)),
+    invoices: [...store.invoices].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    bills: [...store.bills].sort((a, b) => b.createdAt.localeCompare(a.createdAt)),
+    purchaseOrders: [...store.purchaseOrders].sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt)
+    ),
+    journalEntries: [...store.journalEntries].sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt)
+    ),
+    reports,
+    tax,
+  };
+}
+
+function recordJournalEntry(store, entry) {
+  const journalNumber = nextCounter(store, "journal");
+  const totalDebit = entry.lines.reduce(
+    (sum, line) => sum + Number(line.debit || 0),
+    0
+  );
+  const totalCredit = entry.lines.reduce(
+    (sum, line) => sum + Number(line.credit || 0),
+    0
+  );
+
+  if (toCurrencyAmount(totalDebit) !== toCurrencyAmount(totalCredit)) {
+    throw new Error("Journal entry is not balanced.");
+  }
+
+  entry.lines.forEach((line) => requireAccount(store, line.accountCode));
+
+  const record = {
+    id: `je_${journalNumber}`,
+    reference: formatSequence("JE", journalNumber),
+    date: entry.date,
+    memo: entry.memo,
+    sourceType: entry.sourceType || "manual",
+    sourceId: entry.sourceId || null,
+    createdAt: new Date().toISOString(),
+    lines: entry.lines.map((line) => ({
+      accountCode: line.accountCode,
+      debit: toCurrencyAmount(line.debit || 0),
+      credit: toCurrencyAmount(line.credit || 0),
+      memo: line.memo || "",
+    })),
+  };
+
+  store.journalEntries.push(record);
+  return record;
+}
+
+function createInvoice(store, payload) {
+  const client = store.clients.find((item) => item.id === payload.clientId);
+
+  if (!client) {
+    throw new Error("Client is required.");
+  }
+
+  const subtotal = toCurrencyAmount(payload.subtotal);
+  const taxRate = Number(payload.taxRate ?? store.company.defaultTaxRate);
+  const taxAmount = toCurrencyAmount(subtotal * taxRate);
+  const total = toCurrencyAmount(subtotal + taxAmount);
+  const sequence = nextCounter(store, "invoice");
+  const invoice = {
+    id: `invoice_${sequence}`,
+    number: formatSequence("INV", sequence),
+    clientId: client.id,
+    clientName: client.name,
+    description: String(payload.description || "").trim(),
+    issueDate: payload.issueDate,
+    dueDate: payload.dueDate,
+    subtotal,
+    taxRate,
+    taxAmount,
+    total,
+    balanceDue: total,
+    status: "sent",
+    createdAt: new Date().toISOString(),
+    paidAt: null,
+  };
+
+  recordJournalEntry(store, {
+    date: invoice.issueDate,
+    memo: `Invoice ${invoice.number} for ${client.name}`,
+    sourceType: "invoice",
+    sourceId: invoice.id,
+    lines: [
+      { accountCode: "1100", debit: total, credit: 0, memo: invoice.number },
+      { accountCode: "4000", debit: 0, credit: subtotal, memo: invoice.number },
+      { accountCode: "2100", debit: 0, credit: taxAmount, memo: invoice.number },
+    ],
+  });
+
+  store.invoices.push(invoice);
+  return invoice;
+}
+
+function payInvoice(store, invoiceId, payload) {
+  const invoice = store.invoices.find((item) => item.id === invoiceId);
+
+  if (!invoice) {
+    throw new Error("Invoice not found.");
+  }
+
+  if (invoice.status === "paid" || invoice.balanceDue <= 0) {
+    throw new Error("Invoice is already paid.");
+  }
+
+  const amount = toCurrencyAmount(payload.amount || invoice.balanceDue);
+
+  if (amount <= 0 || amount > invoice.balanceDue) {
+    throw new Error("Invalid payment amount.");
+  }
+
+  recordJournalEntry(store, {
+    date: payload.paymentDate,
+    memo: `Payment received for ${invoice.number}`,
+    sourceType: "invoice_payment",
+    sourceId: invoice.id,
+    lines: [
+      { accountCode: "1000", debit: amount, credit: 0, memo: invoice.number },
+      { accountCode: "1100", debit: 0, credit: amount, memo: invoice.number },
+    ],
+  });
+
+  invoice.balanceDue = toCurrencyAmount(invoice.balanceDue - amount);
+  invoice.status = invoice.balanceDue <= 0 ? "paid" : "partial";
+  invoice.paidAt = payload.paymentDate;
+  return invoice;
+}
+
+function createBill(store, payload) {
+  const vendor = store.vendors.find((item) => item.id === payload.vendorId);
+
+  if (!vendor) {
+    throw new Error("Vendor is required.");
+  }
+
+  const subtotal = toCurrencyAmount(payload.subtotal);
+  const taxRate = Number(payload.taxRate ?? store.company.defaultTaxRate);
+  const taxAmount = toCurrencyAmount(subtotal * taxRate);
+  const total = toCurrencyAmount(subtotal + taxAmount);
+  const expenseAccountCode = payload.expenseAccountCode || "6100";
+  const sequence = nextCounter(store, "bill");
+  const bill = {
+    id: `bill_${sequence}`,
+    number: formatSequence("BILL", sequence),
+    vendorId: vendor.id,
+    vendorName: vendor.name,
+    description: String(payload.description || "").trim(),
+    issueDate: payload.issueDate,
+    dueDate: payload.dueDate,
+    expenseAccountCode,
+    subtotal,
+    taxRate,
+    taxAmount,
+    total,
+    balanceDue: total,
+    status: "open",
+    createdAt: new Date().toISOString(),
+    paidAt: null,
+  };
+
+  requireAccount(store, expenseAccountCode);
+
+  recordJournalEntry(store, {
+    date: bill.issueDate,
+    memo: `Supplier bill ${bill.number} from ${vendor.name}`,
+    sourceType: "bill",
+    sourceId: bill.id,
+    lines: [
+      { accountCode: expenseAccountCode, debit: subtotal, credit: 0, memo: bill.number },
+      { accountCode: "1150", debit: taxAmount, credit: 0, memo: bill.number },
+      { accountCode: "2000", debit: 0, credit: total, memo: bill.number },
+    ],
+  });
+
+  store.bills.push(bill);
+  return bill;
+}
+
+function payBill(store, billId, payload) {
+  const bill = store.bills.find((item) => item.id === billId);
+
+  if (!bill) {
+    throw new Error("Bill not found.");
+  }
+
+  if (bill.status === "paid" || bill.balanceDue <= 0) {
+    throw new Error("Bill is already paid.");
+  }
+
+  const amount = toCurrencyAmount(payload.amount || bill.balanceDue);
+
+  if (amount <= 0 || amount > bill.balanceDue) {
+    throw new Error("Invalid payment amount.");
+  }
+
+  recordJournalEntry(store, {
+    date: payload.paymentDate,
+    memo: `Payment sent for ${bill.number}`,
+    sourceType: "bill_payment",
+    sourceId: bill.id,
+    lines: [
+      { accountCode: "2000", debit: amount, credit: 0, memo: bill.number },
+      { accountCode: "1000", debit: 0, credit: amount, memo: bill.number },
+    ],
+  });
+
+  bill.balanceDue = toCurrencyAmount(bill.balanceDue - amount);
+  bill.status = bill.balanceDue <= 0 ? "paid" : "partial";
+  bill.paidAt = payload.paymentDate;
+  return bill;
+}
+
+function createPurchaseOrder(store, payload) {
+  const vendor = store.vendors.find((item) => item.id === payload.vendorId);
+
+  if (!vendor) {
+    throw new Error("Vendor is required.");
+  }
+
+  const sequence = nextCounter(store, "purchaseOrder");
+  const order = {
+    id: `po_${sequence}`,
+    number: formatSequence("PO", sequence),
+    vendorId: vendor.id,
+    vendorName: vendor.name,
+    description: String(payload.description || "").trim(),
+    amount: toCurrencyAmount(payload.amount),
+    expectedDate: payload.expectedDate,
+    status: "open",
+    createdAt: new Date().toISOString(),
+    convertedBillId: null,
+  };
+
+  store.purchaseOrders.push(order);
+  return order;
+}
+
+function convertPurchaseOrderToBill(store, orderId, payload) {
+  const order = store.purchaseOrders.find((item) => item.id === orderId);
+
+  if (!order) {
+    throw new Error("Purchase order not found.");
+  }
+
+  if (order.status === "billed") {
+    throw new Error("Purchase order has already been converted.");
+  }
+
+  const bill = createBill(store, {
+    vendorId: order.vendorId,
+    description: payload.description || order.description,
+    issueDate: payload.issueDate,
+    dueDate: payload.dueDate,
+    subtotal: payload.subtotal || order.amount,
+    taxRate: payload.taxRate,
+    expenseAccountCode: payload.expenseAccountCode,
+  });
+
+  order.status = "billed";
+  order.convertedBillId = bill.id;
+  return bill;
+}
+
+function createManualJournal(store, payload) {
+  return recordJournalEntry(store, {
+    date: payload.date,
+    memo: String(payload.memo || "").trim(),
+    sourceType: "manual",
+    lines: [
+      {
+        accountCode: payload.debitAccountCode,
+        debit: toCurrencyAmount(payload.amount),
+        credit: 0,
+        memo: payload.memo,
+      },
+      {
+        accountCode: payload.creditAccountCode,
+        debit: 0,
+        credit: toCurrencyAmount(payload.amount),
+        memo: payload.memo,
+      },
+    ],
+  });
 }
 
 function escapeHtml(value) {
@@ -178,7 +679,7 @@ function ensureSession(req, res) {
   return session;
 }
 
-function clearSession(req, res) {
+function destroySession(req, res) {
   const existing = getSessionFromRequest(req);
 
   if (existing) {
@@ -188,12 +689,33 @@ function clearSession(req, res) {
   res.setHeader("Set-Cookie", buildExpiredCookie(req));
 }
 
+function resetBankSession(session) {
+  session.oauthState = null;
+  session.codeVerifier = null;
+  session.accessToken = null;
+  session.refreshToken = null;
+  session.tokenType = "Bearer";
+  session.expiresAt = null;
+  session.accounts = [];
+  session.lastSyncAt = null;
+}
+
 function cleanupSessions() {
   const cutoff = now() - SESSION_TTL_MS;
 
   for (const [id, session] of sessions.entries()) {
     if (session.updatedAt < cutoff) {
       sessions.delete(id);
+    }
+  }
+}
+
+function pruneLoginAttempts() {
+  const cutoff = now() - LOGIN_WINDOW_MS;
+
+  for (const [key, attempt] of loginAttempts.entries()) {
+    if (attempt.windowStartedAt < cutoff) {
+      loginAttempts.delete(key);
     }
   }
 }
@@ -270,7 +792,6 @@ function parsePasswordHash(serialized) {
   }
 
   return {
-    algorithm: parts[0],
     n: Number(parts[1]),
     r: Number(parts[2]),
     p: Number(parts[3]),
@@ -324,7 +845,7 @@ function readRequestBody(req) {
     req.on("data", (chunk) => {
       size += chunk.length;
 
-      if (size > 16 * 1024) {
+      if (size > 64 * 1024) {
         reject(new Error("Request body too large."));
         req.destroy();
         return;
@@ -519,12 +1040,8 @@ async function exchangeCodeForToken(session, code) {
 
   const payload = await response.json();
 
-  if (!response.ok) {
+  if (!response.ok || !payload.access_token) {
     throw new Error("Token exchange failed.");
-  }
-
-  if (!payload.access_token) {
-    throw new Error("RBC did not return an access token.");
   }
 
   session.accessToken = payload.access_token;
@@ -586,7 +1103,7 @@ async function fetchRbcAccounts(session) {
   return session.accounts;
 }
 
-function getStatusPayload(session) {
+function getRbcStatusPayload(session) {
   return {
     provider: "RBC",
     configured: hasRbcConfig(),
@@ -604,6 +1121,37 @@ function getAdminStatusPayload(session) {
     username: session.adminAuthenticated ? session.adminUsername : null,
     email: session.adminAuthenticated ? session.adminEmail : null,
   };
+}
+
+function requireAdmin(req, res, session) {
+  if (!session.adminAuthenticated) {
+    sendJson(req, res, 401, { error: "Admin authentication required." });
+    return false;
+  }
+
+  return true;
+}
+
+async function handleDataMutation(req, res, session, action) {
+  if (!requireAdmin(req, res, session)) {
+    return;
+  }
+
+  assertHttpsForSensitiveRoutes(req);
+
+  try {
+    const payload = await readJsonBody(req);
+    const store = readStore();
+    const result = action(store, payload);
+    writeStore(store);
+    sendJson(req, res, 200, {
+      ok: true,
+      result,
+      app: buildBootstrapPayload(store, session),
+    });
+  } catch (error) {
+    sendJson(req, res, 400, { error: error.message || "Request failed." });
+  }
 }
 
 async function handleApi(req, res) {
@@ -671,26 +1219,183 @@ async function handleApi(req, res) {
   }
 
   if (url.pathname === "/api/admin/logout" && req.method === "POST") {
-    session.adminAuthenticated = false;
-    session.adminUsername = null;
-    session.adminEmail = null;
-    session.updatedAt = now();
-    sendJson(req, res, 200, getAdminStatusPayload(session));
+    destroySession(req, res);
+    sendJson(req, res, 200, {
+      configured: hasAdminConfig(),
+      authenticated: false,
+      username: null,
+      email: null,
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/app/bootstrap" && req.method === "GET") {
+    if (!requireAdmin(req, res, session)) {
+      return;
+    }
+
+    const store = readStore();
+    sendJson(req, res, 200, buildBootstrapPayload(store, session));
+    return;
+  }
+
+  if (url.pathname === "/api/company" && req.method === "POST") {
+    await handleDataMutation(req, res, session, (store, payload) => {
+      const name = String(payload.name || "").trim();
+      const currency = String(payload.currency || "").trim().toUpperCase();
+      const taxName = String(payload.taxName || "").trim();
+      const defaultTaxRate = Number(payload.defaultTaxRate);
+
+      if (!name || !currency || !taxName || Number.isNaN(defaultTaxRate)) {
+        throw new Error("Company name, currency, tax name, and default tax rate are required.");
+      }
+
+      store.company = {
+        name,
+        currency,
+        taxName,
+        defaultTaxRate,
+      };
+
+      return store.company;
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/clients" && req.method === "POST") {
+    await handleDataMutation(req, res, session, (store, payload) => {
+      const name = String(payload.name || "").trim();
+
+      if (!name) {
+        throw new Error("Client name is required.");
+      }
+
+      const client = {
+        id: `client_${nextCounter(store, "client")}`,
+        name,
+        email: String(payload.email || "").trim().toLowerCase(),
+        createdAt: new Date().toISOString(),
+      };
+
+      store.clients.push(client);
+      return client;
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/vendors" && req.method === "POST") {
+    await handleDataMutation(req, res, session, (store, payload) => {
+      const name = String(payload.name || "").trim();
+
+      if (!name) {
+        throw new Error("Vendor name is required.");
+      }
+
+      const vendor = {
+        id: `vendor_${nextCounter(store, "vendor")}`,
+        name,
+        email: String(payload.email || "").trim().toLowerCase(),
+        createdAt: new Date().toISOString(),
+      };
+
+      store.vendors.push(vendor);
+      return vendor;
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/accounts" && req.method === "POST") {
+    await handleDataMutation(req, res, session, (store, payload) => {
+      const code = String(payload.code || "").trim();
+      const name = String(payload.name || "").trim();
+      const type = String(payload.type || "").trim().toLowerCase();
+
+      if (!code || !name || !type) {
+        throw new Error("Account code, name, and type are required.");
+      }
+
+      if (store.accounts.some((account) => account.code === code)) {
+        throw new Error("Account code already exists.");
+      }
+
+      const account = {
+        id: `account_${nextCounter(store, "account")}`,
+        code,
+        name,
+        type,
+        system: false,
+      };
+
+      store.accounts.push(account);
+      return account;
+    });
+    return;
+  }
+
+  if (url.pathname === "/api/invoices" && req.method === "POST") {
+    await handleDataMutation(req, res, session, createInvoice);
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/invoices/") && url.pathname.endsWith("/pay") && req.method === "POST") {
+    const invoiceId = url.pathname.split("/")[3];
+    await handleDataMutation(req, res, session, (store, payload) =>
+      payInvoice(store, invoiceId, payload)
+    );
+    return;
+  }
+
+  if (url.pathname === "/api/bills" && req.method === "POST") {
+    await handleDataMutation(req, res, session, createBill);
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/bills/") && url.pathname.endsWith("/pay") && req.method === "POST") {
+    const billId = url.pathname.split("/")[3];
+    await handleDataMutation(req, res, session, (store, payload) =>
+      payBill(store, billId, payload)
+    );
+    return;
+  }
+
+  if (url.pathname === "/api/purchase-orders" && req.method === "POST") {
+    await handleDataMutation(req, res, session, createPurchaseOrder);
+    return;
+  }
+
+  if (
+    url.pathname.startsWith("/api/purchase-orders/") &&
+    url.pathname.endsWith("/convert") &&
+    req.method === "POST"
+  ) {
+    const orderId = url.pathname.split("/")[3];
+    await handleDataMutation(req, res, session, (store, payload) =>
+      convertPurchaseOrderToBill(store, orderId, payload)
+    );
+    return;
+  }
+
+  if (url.pathname === "/api/journal-entries" && req.method === "POST") {
+    await handleDataMutation(req, res, session, createManualJournal);
     return;
   }
 
   if (url.pathname === "/api/rbc/status" && req.method === "GET") {
-    sendJson(req, res, 200, getStatusPayload(session));
+    sendJson(req, res, 200, getRbcStatusPayload(session));
     return;
   }
 
   if (url.pathname === "/api/rbc/disconnect" && req.method === "POST") {
-    clearSession(req, res);
+    resetBankSession(session);
     sendJson(req, res, 200, { disconnected: true });
     return;
   }
 
   if (url.pathname === "/api/rbc/connect-url" && req.method === "GET") {
+    if (!requireAdmin(req, res, session)) {
+      return;
+    }
+
     assertHttpsForSensitiveRoutes(req);
 
     if (!hasRbcConfig()) {
@@ -717,7 +1422,7 @@ async function handleApi(req, res) {
         req,
         res,
         400,
-        `<h1>RBC connection failed</h1><p>The bank returned an error.</p><p><a href="/">Return to Count123</a></p>`
+        "<h1>RBC connection failed</h1><p>The bank returned an error.</p><p><a href=\"/\">Return to Count123</a></p>"
       );
       return;
     }
@@ -753,24 +1458,6 @@ async function handleApi(req, res) {
     return;
   }
 
-  if (url.pathname === "/api/rbc/accounts" && req.method === "GET") {
-    assertHttpsForSensitiveRoutes(req);
-
-    if (!isConnected(session)) {
-      sendJson(req, res, 401, { error: "RBC is not connected." });
-      return;
-    }
-
-    try {
-      const accounts = await fetchRbcAccounts(session);
-      sendJson(req, res, 200, { accounts, lastSyncAt: session.lastSyncAt });
-    } catch {
-      sendJson(req, res, 502, { error: "Account sync failed." });
-    }
-
-    return;
-  }
-
   sendJson(req, res, 404, { error: "Unknown API route" });
 }
 
@@ -790,6 +1477,8 @@ const server = http.createServer(async (req, res) => {
     sendJson(req, res, 500, { error: message });
   }
 });
+
+ensureDataStore();
 
 server.listen(PORT, () => {
   console.log(`Count123 listening on port ${PORT}`);

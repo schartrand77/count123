@@ -114,13 +114,65 @@ Count123 is being positioned around:
 - Cleaner accountant handoff at year-end
 - Self-hosted deployment
 
-## Next build targets
+## Roadmap
 
-- Client, quote, and invoice management
-- Purchase orders, bills, and payables workflows
-- Receipt capture and expense categorization
-- Reconciliation and month-end close tooling
-- GST/HST tracking and summaries
-- Bank-feed sync and transaction matching
-- Tax-season exports and reporting
-- Import/export and audit trail tooling
+### Phase 1: Operating Foundation
+
+Goal: make Count123 usable as a compact single-business accounting workspace.
+
+- Company setup and accounting defaults
+- Client and vendor master records
+- Chart of accounts management
+- Invoice creation and payment posting
+- Bill creation and payment posting
+- Purchase order creation and conversion to bills
+- Manual journals and derived financial summaries
+- GST/HST calculation and reporting baseline
+
+Current status:
+- Completed.
+- Live backend storage, company settings, transaction posting, tax baseline, and financial summary derivation are implemented.
+- The current app now covers the full Phase 1 operating foundation for a single-business admin workspace.
+
+### Phase 2: Workflow Depth
+
+Goal: reduce manual accounting work across the monthly operating cycle.
+
+- Partial payments and payment history
+- Invoice and bill status workflows with notes
+- Recurring invoices and recurring bills
+- Better purchasing states such as approved, received, and billed
+- Month-end review queue and close checklist
+- Exportable statements and transaction reports
+
+### Phase 3: Banking and Reconciliation
+
+Goal: connect bank activity to the ledger with fewer manual adjustments.
+
+- Real RBC account sync once credentials and approved endpoints are supplied
+- Transaction import and storage
+- Matching rules for invoices, bills, transfers, and fees
+- Reconciliation workspace with exception handling
+- Cashflow timeline and sync health monitoring
+
+### Phase 4: Compliance and Controls
+
+Goal: make the app defensible for real business use beyond a single admin operator.
+
+- Audit log and history views
+- Attachment and document support
+- Stronger settings and role controls
+- Backup/export workflows
+- Year-end accountant package
+- Production hardening, monitoring, and deployment controls
+
+### Phase 5: Professional Expansion
+
+Goal: move from a capable single-business ledger into a broader accounting platform.
+
+- Multi-user and role-based access
+- Multi-business or multi-entity support
+- Advanced tax workflows
+- Payroll and reimbursement modules
+- Rich reporting and dashboards
+- Third-party integrations beyond banking

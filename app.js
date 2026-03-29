@@ -1,328 +1,578 @@
-const datasets = {
-  "7d": [
-    { label: "Cash", value: "$24,900", note: "Chequing and savings" },
-    { label: "Open Invoices", value: "$8,340", note: "4 clients outstanding" },
-    { label: "Payables Due", value: "$2,190", note: "3 supplier bills this week" },
-    { label: "Net Income", value: "$6,870", note: "Month to date after expenses" },
-  ],
-  "30d": [
-    { label: "Cash", value: "$26,120", note: "Average ending balance" },
-    { label: "Open Invoices", value: "$10,280", note: "Average 12 day collection cycle" },
-    { label: "Payables Due", value: "$3,420", note: "Vendors and software renewals" },
-    { label: "Net Income", value: "$8,330", note: "Trailing 30 days" },
-  ],
-  "90d": [
-    { label: "Cash", value: "$23,480", note: "Volatility down 8.2%" },
-    { label: "Open Invoices", value: "$11,640", note: "Project invoices increased" },
-    { label: "Payables Due", value: "$4,160", note: "Equipment and contractor bills" },
-    { label: "Net Income", value: "$14,210", note: "Quarter to date" },
-  ],
+const state = {
+  app: null,
+  bank: null,
 };
 
-const journalEntries = [
-  {
-    title: "Client invoice recorded",
-    meta: "2026-03-29 | Consulting income",
-    lines: "Dr Accounts Receivable / Cr Service Revenue",
-    amount: "$1,840",
-  },
-  {
-    title: "Supplier bill posted",
-    meta: "2026-03-28 | Accounts payable",
-    lines: "Dr Office Expense / Cr Accounts Payable",
-    amount: "$329",
-  },
-  {
-    title: "Bank reconciliation adjustment",
-    meta: "2026-03-27 | Month-end close",
-    lines: "Dr Bank Charges / Cr Cash",
-    amount: "$428",
-  },
-];
-
-const statsGrid = document.getElementById("stats-grid");
-const rangeSwitcher = document.getElementById("range-switcher");
-const journalList = document.getElementById("journal-list");
-const postEntryButton = document.getElementById("post-entry");
-const connectBankButton = document.getElementById("connect-bank");
-const bankStatus = document.getElementById("bank-status");
-const bankStatusNote = document.getElementById("bank-status-note");
-const bankAccountCount = document.getElementById("bank-account-count");
-const bankAccountNote = document.getElementById("bank-account-note");
-const bankLastSync = document.getElementById("bank-last-sync");
-const bankLastSyncNote = document.getElementById("bank-last-sync-note");
-const bankAccounts = document.getElementById("bank-accounts");
 const adminBadge = document.getElementById("admin-badge");
+const adminLogoutButton = document.getElementById("admin-logout");
 const adminLoginForm = document.getElementById("admin-login-form");
 const adminEmailInput = document.getElementById("admin-email");
 const adminUsernameInput = document.getElementById("admin-username");
 const adminPasswordInput = document.getElementById("admin-password");
-const adminLogoutButton = document.getElementById("admin-logout");
-const adminMessage = document.getElementById("admin-message");
 const adminLoginSubmit = document.getElementById("admin-login-submit");
+const adminMessage = document.getElementById("admin-message");
+const authPanel = document.getElementById("auth-panel");
+const workspace = document.getElementById("workspace");
+const companyName = document.getElementById("company-name");
+const summaryGrid = document.getElementById("summary-grid");
+const bankSummaryGrid = document.getElementById("bank-summary-grid");
+const bankAccounts = document.getElementById("bank-accounts");
+const invoiceList = document.getElementById("invoice-list");
+const billList = document.getElementById("bill-list");
+const purchaseOrderList = document.getElementById("purchase-order-list");
+const accountList = document.getElementById("account-list");
+const journalList = document.getElementById("journal-list");
+const taxGrid = document.getElementById("tax-grid");
+const reportGrid = document.getElementById("report-grid");
+const clientList = document.getElementById("client-list");
+const vendorList = document.getElementById("vendor-list");
+const connectBankButton = document.getElementById("connect-bank");
 
-function renderStats(range) {
-  statsGrid.innerHTML = "";
+const clientForm = document.getElementById("client-form");
+const vendorForm = document.getElementById("vendor-form");
+const companyForm = document.getElementById("company-form");
+const accountForm = document.getElementById("account-form");
+const invoiceForm = document.getElementById("invoice-form");
+const billForm = document.getElementById("bill-form");
+const purchaseOrderForm = document.getElementById("purchase-order-form");
+const journalForm = document.getElementById("journal-form");
+const companyNameInput = document.getElementById("company-name-input");
+const companyCurrencyInput = document.getElementById("company-currency-input");
+const companyTaxNameInput = document.getElementById("company-tax-name-input");
+const companyTaxRateInput = document.getElementById("company-tax-rate-input");
+const invoiceTaxRateInput = document.getElementById("invoice-tax-rate");
+const billTaxRateInput = document.getElementById("bill-tax-rate");
 
-  datasets[range].forEach((item) => {
-    const card = document.createElement("article");
-    card.className = "stat-card";
-    card.innerHTML = `
-      <span>${item.label}</span>
-      <strong>${item.value}</strong>
-      <small>${item.note}</small>
-    `;
-    statsGrid.appendChild(card);
-  });
+function currency(value) {
+  const currencyCode = state.app?.company?.currency || "CAD";
+  return new Intl.NumberFormat("en-CA", {
+    style: "currency",
+    currency: currencyCode,
+  }).format(Number(value || 0));
 }
 
-function renderJournalEntries() {
-  journalList.innerHTML = "";
-
-  journalEntries.forEach((entry) => {
-    const item = document.createElement("article");
-    item.className = "journal-item";
-    item.innerHTML = `
-      <div>
-        <h5>${entry.title}</h5>
-        <p class="journal-meta">${entry.meta}</p>
-        <p class="journal-lines">${entry.lines}</p>
-      </div>
-      <div class="journal-amount">${entry.amount}</div>
-    `;
-    journalList.appendChild(item);
-  });
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
 }
 
-function formatTimestamp(value) {
-  if (!value) {
-    return "Pending";
+async function api(path, options = {}) {
+  const response = await fetch(path, {
+    headers: {
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
+    },
+    ...options,
+  });
+
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    throw new Error(payload.error || "Request failed.");
   }
 
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return "Pending";
-  }
-
-  return date.toLocaleString();
+  return payload;
 }
 
-function renderBankAccounts(accounts) {
-  if (!accounts.length) {
-    bankAccounts.innerHTML =
-      '<p class="bank-empty">Connect RBC to load business bank accounts and balances into Count123.</p>';
+function setAdminUi(adminStatus) {
+  const configured = Boolean(adminStatus?.configured);
+  const authenticated = Boolean(adminStatus?.authenticated);
+
+  adminBadge.textContent = authenticated
+    ? `Admin online: ${adminStatus.username}`
+    : configured
+      ? "Admin offline"
+      : "Admin unconfigured";
+
+  adminLogoutButton.disabled = !authenticated;
+  adminLoginSubmit.disabled = !configured || authenticated;
+  adminEmailInput.disabled = !configured || authenticated;
+  adminUsernameInput.disabled = !configured || authenticated;
+  adminPasswordInput.disabled = !configured || authenticated;
+
+  authPanel.hidden = authenticated;
+  workspace.hidden = !authenticated;
+
+  if (!configured) {
+    adminMessage.textContent =
+      "Configure ADMIN_EMAIL, ADMIN_USERNAME, and ADMIN_PASSWORD_HASH first.";
+  } else if (!authenticated) {
+    adminMessage.textContent =
+      "Enter the configured admin credentials to access the accounting workspace.";
+  }
+}
+
+function renderSimpleList(target, rows, config) {
+  if (!rows.length) {
+    target.innerHTML = `<p class="empty-state">${config.empty}</p>`;
     return;
   }
 
-  bankAccounts.innerHTML = accounts
-    .map((account) => {
-      const balance = account.balance ?? account.availableBalance ?? "Unavailable";
-      const currency = account.currency ?? "CAD";
-      const type = account.type ?? "Business account";
+  target.innerHTML = rows.map((row) => config.render(row)).join("");
+}
 
-      return `
-        <article class="journal-item">
-          <div>
-            <h5>${account.name ?? "Unnamed account"}</h5>
-            <p class="journal-meta">${type}</p>
-            <p class="journal-lines">${account.id ?? "No account identifier returned"}</p>
-          </div>
-          <div class="journal-amount">${balance} ${currency}</div>
+function renderSummaryCards() {
+  const summary = state.app.summary;
+
+  summaryGrid.innerHTML = [
+    { label: "Cash", value: currency(summary.cash), note: "Live balance from journals" },
+    { label: "Open Invoices", value: currency(summary.openInvoices), note: "Outstanding receivables" },
+    { label: "Payables Due", value: currency(summary.payablesDue), note: "Open supplier obligations" },
+    { label: "Net Income", value: currency(summary.netIncome), note: "Derived from posted entries" },
+    {
+      label: `${state.app.company.taxName} Payable`,
+      value: currency(summary.taxPayable),
+      note: `Current ${state.app.company.taxName} position`,
+    },
+  ]
+    .map(
+      (item) => `
+        <article class="metric-card">
+          <span>${item.label}</span>
+          <strong>${item.value}</strong>
+          <small>${item.note}</small>
         </article>
-      `;
-    })
+      `
+    )
     .join("");
 }
 
-function setAdminUi(payload) {
-  const configured = Boolean(payload?.configured);
-  const authenticated = Boolean(payload?.authenticated);
-
-  if (adminBadge) {
-    adminBadge.textContent = authenticated
-      ? `Admin online: ${payload.username}`
-      : configured
-        ? "Admin offline"
-        : "Admin unconfigured";
-  }
-
-  if (adminLogoutButton) {
-    adminLogoutButton.disabled = !authenticated;
-  }
-
-  if (adminLoginSubmit) {
-    adminLoginSubmit.disabled = !configured || authenticated;
-  }
-
-  if (adminEmailInput) {
-    adminEmailInput.disabled = !configured || authenticated;
-  }
-
-  if (adminUsernameInput) {
-    adminUsernameInput.disabled = !configured || authenticated;
-  }
-
-  if (adminPasswordInput) {
-    adminPasswordInput.disabled = !configured || authenticated;
-  }
-
-  if (!configured) {
-    adminMessage.textContent = "Admin login is not configured yet.";
-    return;
-  }
-
-  adminMessage.textContent = authenticated
-    ? `Signed in as ${payload.username} (${payload.email}).`
-    : "Enter the configured admin email, username, and password.";
+function renderInvoices() {
+  renderSimpleList(invoiceList, state.app.invoices, {
+    empty: "No invoices posted yet.",
+    render: (invoice) => `
+      <article class="data-row">
+        <div>
+          <h4>${escapeHtml(invoice.number)} | ${escapeHtml(invoice.clientName)}</h4>
+          <p>${escapeHtml(invoice.description)}</p>
+          <small>Issued ${escapeHtml(invoice.issueDate)} | Due ${escapeHtml(invoice.dueDate)}</small>
+        </div>
+        <div class="row-meta">
+          <strong>${currency(invoice.total)}</strong>
+          <span>${escapeHtml(invoice.status)}</span>
+          <small>Balance ${currency(invoice.balanceDue)}</small>
+          ${
+            invoice.status !== "paid"
+              ? `<button class="ghost-button action-button" data-action="pay-invoice" data-id="${escapeHtml(invoice.id)}">Record Payment</button>`
+              : ""
+          }
+        </div>
+      </article>
+    `,
+  });
 }
 
-async function loadAdminStatus() {
-  try {
-    const response = await fetch("/api/admin/status");
-    const payload = await response.json();
-    setAdminUi(payload);
-  } catch {
-    adminMessage.textContent = "Admin status is unavailable.";
-  }
+function renderBills() {
+  renderSimpleList(billList, state.app.bills, {
+    empty: "No bills posted yet.",
+    render: (bill) => `
+      <article class="data-row">
+        <div>
+          <h4>${escapeHtml(bill.number)} | ${escapeHtml(bill.vendorName)}</h4>
+          <p>${escapeHtml(bill.description)}</p>
+          <small>Issued ${escapeHtml(bill.issueDate)} | Due ${escapeHtml(bill.dueDate)}</small>
+        </div>
+        <div class="row-meta">
+          <strong>${currency(bill.total)}</strong>
+          <span>${escapeHtml(bill.status)}</span>
+          <small>Balance ${currency(bill.balanceDue)}</small>
+          ${
+            bill.status !== "paid"
+              ? `<button class="ghost-button action-button" data-action="pay-bill" data-id="${escapeHtml(bill.id)}">Mark Paid</button>`
+              : ""
+          }
+        </div>
+      </article>
+    `,
+  });
 }
 
-async function loadBankStatus() {
-  try {
-    const response = await fetch("/api/rbc/status");
-    const payload = await response.json();
-
-    bankStatus.textContent = payload.connected
-      ? "Connected"
-      : payload.configured
-        ? "Ready to connect"
-        : "Not configured";
-
-    bankStatusNote.textContent = payload.connected
-      ? "OAuth credentials are configured and an access token is active."
-      : payload.configured
-        ? "Server credentials are present. Connect RBC to sync account data."
-        : "Add RBC API credentials in the server environment.";
-
-    bankAccountCount.textContent = String(payload.accounts.length);
-    bankAccountNote.textContent = payload.connected
-      ? "Accounts returned from the configured RBC accounts endpoint."
-      : "No account data has been synced yet.";
-
-    bankLastSync.textContent = formatTimestamp(payload.lastSyncAt);
-    bankLastSyncNote.textContent = payload.lastSyncAt
-      ? "Latest successful account sync from the bank API."
-      : "Waiting for a successful bank connection.";
-
-    renderBankAccounts(payload.accounts);
-
-    if (connectBankButton) {
-      connectBankButton.disabled = !payload.configured;
-      connectBankButton.textContent = payload.connected ? "Reconnect RBC" : "Connect RBC";
-    }
-  } catch (error) {
-    bankStatus.textContent = "Unavailable";
-    bankStatusNote.textContent = "The bank integration endpoint is not responding.";
-  }
+function renderPurchaseOrders() {
+  renderSimpleList(purchaseOrderList, state.app.purchaseOrders, {
+    empty: "No purchase orders created yet.",
+    render: (order) => `
+      <article class="data-row">
+        <div>
+          <h4>${escapeHtml(order.number)} | ${escapeHtml(order.vendorName)}</h4>
+          <p>${escapeHtml(order.description)}</p>
+          <small>Expected ${escapeHtml(order.expectedDate)}</small>
+        </div>
+        <div class="row-meta">
+          <strong>${currency(order.amount)}</strong>
+          <span>${escapeHtml(order.status)}</span>
+          ${
+            order.status === "open"
+              ? `<button class="ghost-button action-button" data-action="convert-po" data-id="${escapeHtml(order.id)}">Convert to Bill</button>`
+              : ""
+          }
+        </div>
+      </article>
+    `,
+  });
 }
 
-rangeSwitcher.addEventListener("click", (event) => {
-  const button = event.target.closest("[data-range]");
+function renderAccounts() {
+  renderSimpleList(accountList, state.app.accounts, {
+    empty: "No accounts available.",
+    render: (account) => `
+      <article class="table-row">
+        <div><span>Code</span><strong>${escapeHtml(account.code)}</strong></div>
+        <div><span>Account</span><strong>${escapeHtml(account.name)}</strong></div>
+        <div><span>Type</span><strong>${escapeHtml(account.type)}</strong></div>
+        <div><span>Balance</span><strong>${currency(account.balance)}</strong></div>
+      </article>
+    `,
+  });
+}
 
-  if (!button) {
-    return;
-  }
+function renderJournals() {
+  renderSimpleList(journalList, state.app.journalEntries, {
+    empty: "No journal entries posted yet.",
+    render: (entry) => `
+      <article class="data-row">
+        <div>
+          <h4>${escapeHtml(entry.reference)} | ${escapeHtml(entry.memo)}</h4>
+          <p>${entry.lines
+            .map(
+              (line) =>
+                `${escapeHtml(line.accountCode)} Dr ${currency(line.debit)} / Cr ${currency(line.credit)}`
+            )
+            .join("<br />")}</p>
+          <small>${escapeHtml(entry.date)} | ${escapeHtml(entry.sourceType)}</small>
+        </div>
+      </article>
+    `,
+  });
+}
 
-  rangeSwitcher.querySelectorAll(".pill").forEach((pill) => {
-    pill.classList.remove("active");
+function renderTaxAndReports() {
+  const tax = state.app.tax;
+  const reports = state.app.reports;
+
+  taxGrid.innerHTML = [
+    { label: `Collected ${state.app.company.taxName}`, value: currency(tax.collected) },
+    { label: `Recoverable ${state.app.company.taxName}`, value: currency(tax.recoverable) },
+    { label: `Net ${state.app.company.taxName}`, value: currency(tax.netRemittance) },
+  ]
+    .map(
+      (item) => `
+        <article class="metric-card compact">
+          <span>${item.label}</span>
+          <strong>${item.value}</strong>
+        </article>
+      `
+    )
+    .join("");
+
+  reportGrid.innerHTML = `
+    <article class="report-card">
+      <span>Profit & Loss</span>
+      <strong>${currency(reports.profitAndLoss.netIncome)}</strong>
+      <small>Revenue ${currency(reports.profitAndLoss.revenue)} | Expenses ${currency(reports.profitAndLoss.expenses)}</small>
+    </article>
+    <article class="report-card">
+      <span>Balance Sheet</span>
+      <strong>${currency(reports.balanceSheet.assets)}</strong>
+      <small>Assets ${currency(reports.balanceSheet.assets)} | Liabilities ${currency(reports.balanceSheet.liabilities)}</small>
+    </article>
+  `;
+}
+
+function renderMasterLists() {
+  renderSimpleList(clientList, state.app.clients, {
+    empty: "No clients yet.",
+    render: (client) => `
+      <article class="mini-row">
+        <strong>${escapeHtml(client.name)}</strong>
+        <small>${escapeHtml(client.email || "No email")}</small>
+      </article>
+    `,
   });
 
-  button.classList.add("active");
-  renderStats(button.dataset.range);
-});
+  renderSimpleList(vendorList, state.app.vendors, {
+    empty: "No vendors yet.",
+    render: (vendor) => `
+      <article class="mini-row">
+        <strong>${escapeHtml(vendor.name)}</strong>
+        <small>${escapeHtml(vendor.email || "No email")}</small>
+      </article>
+    `,
+  });
+}
 
-postEntryButton.addEventListener("click", () => {
-  const today = new Date().toISOString().slice(0, 10);
+function renderBank() {
+  const bank = state.bank || { configured: false, connected: false, accounts: [] };
 
-  journalEntries.unshift({
-    title: "Purchase order converted to bill",
-    meta: `${today} | Purchasing workflow`,
-    lines: "Dr Inventory or Expense / Cr Accounts Payable",
-    amount: "$960",
+  bankSummaryGrid.innerHTML = [
+    {
+      label: "Status",
+      value: bank.connected ? "Connected" : bank.configured ? "Ready" : "Not configured",
+    },
+    { label: "Accounts", value: String(bank.accounts.length) },
+    {
+      label: "Last Sync",
+      value: bank.lastSyncAt ? new Date(bank.lastSyncAt).toLocaleString() : "Pending",
+    },
+  ]
+    .map(
+      (item) => `
+        <article class="metric-card compact">
+          <span>${item.label}</span>
+          <strong>${escapeHtml(item.value)}</strong>
+        </article>
+      `
+    )
+    .join("");
+
+  renderSimpleList(bankAccounts, bank.accounts, {
+    empty: "Connect RBC after signing in to sync bank balances.",
+    render: (account) => `
+      <article class="data-row">
+        <div>
+          <h4>${escapeHtml(account.name)}</h4>
+          <p>${escapeHtml(account.type || "Business account")}</p>
+          <small>${escapeHtml(account.id || "")}</small>
+        </div>
+        <div class="row-meta">
+          <strong>${currency(account.balance || account.availableBalance || 0)}</strong>
+          <span>${escapeHtml(account.currency || state.app.company.currency)}</span>
+        </div>
+      </article>
+    `,
   });
 
-  if (journalEntries.length > 5) {
-    journalEntries.pop();
-  }
+  connectBankButton.disabled = !bank.configured;
+}
 
-  renderJournalEntries();
-});
+function renderSelectOptions() {
+  const clientOptions = state.app.clients
+    .map((client) => `<option value="${escapeHtml(client.id)}">${escapeHtml(client.name)}</option>`)
+    .join("");
+  const vendorOptions = state.app.vendors
+    .map((vendor) => `<option value="${escapeHtml(vendor.id)}">${escapeHtml(vendor.name)}</option>`)
+    .join("");
+  const accountOptions = state.app.accounts
+    .map((account) => `<option value="${escapeHtml(account.code)}">${escapeHtml(account.code)} | ${escapeHtml(account.name)}</option>`)
+    .join("");
+  const expenseOptions = state.app.accounts
+    .filter((account) => account.type === "expense")
+    .map((account) => `<option value="${escapeHtml(account.code)}">${escapeHtml(account.code)} | ${escapeHtml(account.name)}</option>`)
+    .join("");
 
-connectBankButton?.addEventListener("click", async () => {
-  try {
-    const response = await fetch("/api/rbc/connect-url");
-    const payload = await response.json();
+  document.getElementById("invoice-client").innerHTML = clientOptions;
+  document.getElementById("bill-vendor").innerHTML = vendorOptions;
+  document.getElementById("po-vendor").innerHTML = vendorOptions;
+  document.getElementById("journal-debit").innerHTML = accountOptions;
+  document.getElementById("journal-credit").innerHTML = accountOptions;
+  document.getElementById("bill-account").innerHTML = expenseOptions || accountOptions;
+}
 
-    if (!response.ok) {
-      throw new Error(payload.error || "Unable to build RBC connect URL.");
-    }
+function renderWorkspace() {
+  companyName.textContent = `${state.app.company.name} Workspace`;
+  companyNameInput.value = state.app.company.name;
+  companyCurrencyInput.value = state.app.company.currency;
+  companyTaxNameInput.value = state.app.company.taxName;
+  companyTaxRateInput.value = state.app.company.defaultTaxRate;
+  invoiceTaxRateInput.value = state.app.company.defaultTaxRate;
+  billTaxRateInput.value = state.app.company.defaultTaxRate;
+  renderSummaryCards();
+  renderSelectOptions();
+  renderInvoices();
+  renderBills();
+  renderPurchaseOrders();
+  renderAccounts();
+  renderJournals();
+  renderTaxAndReports();
+  renderMasterLists();
+  renderBank();
+}
 
-    window.location.href = payload.url;
-  } catch (error) {
-    bankStatus.textContent = "Connection blocked";
-    bankStatusNote.textContent = error.message;
-  }
-});
+async function refreshApp() {
+  state.app = await api("/api/app/bootstrap", { method: "GET", headers: {} });
+  state.bank = await api("/api/rbc/status", { method: "GET", headers: {} });
+  renderWorkspace();
+}
 
-adminLoginForm?.addEventListener("submit", async (event) => {
+async function submitJsonForm(form, path, transform) {
+  const formData = new FormData(form);
+  const payload = transform(Object.fromEntries(formData.entries()));
+  const result = await api(path, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+  state.app = result.app;
+  renderWorkspace();
+  form.reset();
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+adminLoginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
 
   try {
     adminMessage.textContent = "Signing in...";
-
-    const response = await fetch("/api/admin/login", {
+    const payload = await api("/api/admin/login", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
       body: JSON.stringify({
         email: adminEmailInput.value,
         username: adminUsernameInput.value,
         password: adminPasswordInput.value,
       }),
     });
-    const payload = await response.json();
-
-    if (!response.ok) {
-      throw new Error(payload.error || "Login failed.");
-    }
 
     adminPasswordInput.value = "";
     setAdminUi(payload);
+    await refreshApp();
   } catch (error) {
     adminPasswordInput.value = "";
     adminMessage.textContent = error.message;
   }
 });
 
-adminLogoutButton?.addEventListener("click", async () => {
+adminLogoutButton.addEventListener("click", async () => {
   try {
-    const response = await fetch("/api/admin/logout", {
+    const payload = await api("/api/admin/logout", {
       method: "POST",
+      body: JSON.stringify({}),
     });
-    const payload = await response.json();
-
-    if (!response.ok) {
-      throw new Error(payload.error || "Logout failed.");
-    }
-
+    state.app = null;
+    state.bank = null;
     setAdminUi(payload);
   } catch (error) {
     adminMessage.textContent = error.message;
   }
 });
 
-renderStats("7d");
-renderJournalEntries();
-loadBankStatus();
-loadAdminStatus();
+clientForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitJsonForm(clientForm, "/api/clients", (payload) => payload);
+});
+
+vendorForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitJsonForm(vendorForm, "/api/vendors", (payload) => payload);
+});
+
+companyForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitJsonForm(companyForm, "/api/company", (payload) => ({
+    ...payload,
+    defaultTaxRate: Number(payload.defaultTaxRate),
+    currency: String(payload.currency || "").toUpperCase(),
+  }));
+});
+
+accountForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitJsonForm(accountForm, "/api/accounts", (payload) => payload);
+});
+
+invoiceForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitJsonForm(invoiceForm, "/api/invoices", (payload) => ({
+    ...payload,
+    subtotal: Number(payload.subtotal),
+    taxRate: Number(payload.taxRate),
+  }));
+});
+
+billForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitJsonForm(billForm, "/api/bills", (payload) => ({
+    ...payload,
+    subtotal: Number(payload.subtotal),
+    taxRate: Number(payload.taxRate),
+  }));
+});
+
+purchaseOrderForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitJsonForm(purchaseOrderForm, "/api/purchase-orders", (payload) => ({
+    ...payload,
+    amount: Number(payload.amount),
+  }));
+});
+
+journalForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitJsonForm(journalForm, "/api/journal-entries", (payload) => ({
+    ...payload,
+    amount: Number(payload.amount),
+  }));
+});
+
+document.body.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-action]");
+
+  if (!button) {
+    return;
+  }
+
+  try {
+    if (button.dataset.action === "pay-invoice") {
+      const result = await api(`/api/invoices/${button.dataset.id}/pay`, {
+        method: "POST",
+        body: JSON.stringify({ paymentDate: today() }),
+      });
+      state.app = result.app;
+      renderWorkspace();
+    }
+
+    if (button.dataset.action === "pay-bill") {
+      const result = await api(`/api/bills/${button.dataset.id}/pay`, {
+        method: "POST",
+        body: JSON.stringify({ paymentDate: today() }),
+      });
+      state.app = result.app;
+      renderWorkspace();
+    }
+
+    if (button.dataset.action === "convert-po") {
+      const result = await api(`/api/purchase-orders/${button.dataset.id}/convert`, {
+        method: "POST",
+        body: JSON.stringify({
+          issueDate: today(),
+          dueDate: today(),
+          taxRate: state.app.company.defaultTaxRate,
+          expenseAccountCode: "6100",
+        }),
+      });
+      state.app = result.app;
+      renderWorkspace();
+    }
+  } catch (error) {
+    adminMessage.textContent = error.message;
+  }
+});
+
+connectBankButton.addEventListener("click", async () => {
+  try {
+    const payload = await api("/api/rbc/connect-url", { method: "GET", headers: {} });
+    window.location.href = payload.url;
+  } catch (error) {
+    adminMessage.textContent = error.message;
+  }
+});
+
+async function initialize() {
+  try {
+    const adminStatus = await api("/api/admin/status", { method: "GET", headers: {} });
+    setAdminUi(adminStatus);
+
+    if (adminStatus.authenticated) {
+      await refreshApp();
+    }
+  } catch (error) {
+    adminMessage.textContent = error.message;
+  }
+}
+
+initialize();
