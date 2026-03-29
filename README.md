@@ -6,6 +6,8 @@ This repo now includes a server-side bank integration scaffold for Royal Bank of
 
 It is not possible to honestly guarantee a web app is "100% secure and compliant." This repo is hardened to a stronger baseline, but real compliance still depends on hosting, legal scope, data handling, monitoring, and the bank's production requirements.
 
+It also includes a secure admin login flow that requires the configured email, username, and password on the server side.
+
 ## What is in this repo
 
 - A dependency-free frontend starter app
@@ -30,6 +32,9 @@ Then open `http://localhost:8087`.
 1. Copy [`.env.example`](./.env.example) to `.env`.
 2. Fill in the RBC OAuth values for your developer application:
    - `SESSION_SECRET`
+   - `ADMIN_EMAIL`
+   - `ADMIN_USERNAME`
+   - `ADMIN_PASSWORD_HASH`
    - `RBC_CLIENT_ID`
    - `RBC_CLIENT_SECRET`
    - `RBC_AUTH_URL`
@@ -49,6 +54,9 @@ Because RBC endpoint details and credentials are app-specific, this repo ships a
 ## Security baseline in this repo
 
 - Signed, per-user `HttpOnly` session cookies instead of a single shared process session
+- Server-side admin authentication with email, username, and password verification
+- Scrypt password-hash verification with timing-safe comparisons
+- Basic login rate limiting for failed admin sign-in attempts
 - OAuth state validation plus PKCE for the RBC authorization flow
 - Security headers including CSP, HSTS when HTTPS is enabled, `X-Frame-Options`, `nosniff`, and restrictive referrer and permissions policies
 - No bank credentials or tokens exposed to frontend JavaScript
@@ -64,6 +72,14 @@ Because RBC endpoint details and credentials are app-specific, this repo ships a
 - Privacy policy, retention policy, and access control review
 - Bank-specific security review and any contractual compliance obligations from RBC
 - Penetration testing and dependency/container scanning in CI
+
+## Generate the admin password hash
+
+Use Node to generate a scrypt hash for `ADMIN_PASSWORD_HASH`:
+
+```bash
+node -e "const crypto=require('node:crypto'); const password=process.argv[1]; const salt=crypto.randomBytes(16).toString('base64url'); const N=16384,r=8,p=1; const hash=crypto.scryptSync(password, salt, 64, {N,r,p}).toString('base64url'); console.log(`scrypt$${N}$${r}$${p}$${salt}$${hash}`);" "your-strong-password"
+```
 
 ## Deploy on Unraid
 

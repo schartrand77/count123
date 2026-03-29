@@ -153,6 +153,23 @@ button {
   color: var(--muted);
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.admin-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
 .topnav a:hover,
 .topnav a:focus-visible {
   color: var(--text);
@@ -393,6 +410,56 @@ button {
   margin-top: 18px;
 }
 
+.admin-form {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 18px;
+}
+
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
+.field input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  outline: none;
+}
+
+.field input:focus {
+  border-color: rgba(141, 242, 213, 0.7);
+  box-shadow: 0 0 0 3px rgba(141, 242, 213, 0.12);
+}
+
+.field-wide {
+  grid-column: span 2;
+}
+
+.admin-actions {
+  grid-column: span 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.admin-message {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .bank-accounts {
   display: grid;
   gap: 12px;
@@ -530,7 +597,8 @@ button {
   }
 
   .section-heading.inline,
-  .topbar {
+  .topbar,
+  .admin-actions {
     flex-direction: column;
     align-items: stretch;
   }
@@ -560,6 +628,15 @@ button {
 
   .stats-grid {
     grid-template-columns: 1fr;
+  }
+
+  .admin-form {
+    grid-template-columns: 1fr;
+  }
+
+  .field-wide,
+  .admin-actions {
+    grid-column: auto;
   }
 
   .panel-title-row {

@@ -12,6 +12,8 @@ const SESSION_SECRET =
 const TRUST_PROXY = process.env.TRUST_PROXY === "true";
 const FORCE_HTTPS = process.env.FORCE_HTTPS === "true";
 const ALLOW_INSECURE_BANK_URLS = process.env.ALLOW_INSECURE_BANK_URLS === "true";
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const MAX_LOGIN_ATTEMPTS = 5;
 
 const CONTENT_TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -26,9 +28,20 @@ const CONTENT_TYPES = {
 };
 
 const sessions = new Map();
+const loginAttempts = new Map();
 
 function now() {
   return Date.now();
+}
+
+function pruneLoginAttempts() {
+  const cutoff = now() - LOGIN_WINDOW_MS;
+
+  for (const [key, attempt] of loginAttempts.entries()) {
+    if (attempt.windowStartedAt < cutoff) {
+      loginAttempts.delete(key);
+    }
+  }
 }
 
 function escapeHtml(value) {
@@ -107,6 +120,9 @@ function createSession() {
     id: sessionId,
     createdAt: now(),
     updatedAt: now(),
+    adminAuthenticated: false,
+    adminUsername: null,
+    adminEmail: null,
     oauthState: null,
     codeVerifier: null,
     accessToken: null,
@@ -182,6 +198,18 @@ function cleanupSessions() {
   }
 }
 
+function getClientAddress(req) {
+  if (TRUST_PROXY) {
+    const forwardedFor = req.headers["x-forwarded-for"];
+
+    if (typeof forwardedFor === "string" && forwardedFor.trim()) {
+      return forwardedFor.split(",")[0].trim();
+    }
+  }
+
+  return req.socket.remoteAddress || "unknown";
+}
+
 function isSecureRequest(req) {
   if (TRUST_PROXY) {
     const forwardedProto = req.headers["x-forwarded-proto"];
@@ -219,6 +247,141 @@ function validateUrlEnv(name, allowHttp = false) {
   }
 
   return parsed.toString();
+}
+
+function getAdminConfig() {
+  return {
+    email: process.env.ADMIN_EMAIL || "",
+    username: process.env.ADMIN_USERNAME || "",
+    passwordHash: process.env.ADMIN_PASSWORD_HASH || "",
+  };
+}
+
+function hasAdminConfig() {
+  const config = getAdminConfig();
+  return Boolean(config.email && config.username && config.passwordHash);
+}
+
+function parsePasswordHash(serialized) {
+  const parts = serialized.split("$");
+
+  if (parts.length !== 6 || parts[0] !== "scrypt") {
+    throw new Error("ADMIN_PASSWORD_HASH must use scrypt format.");
+  }
+
+  return {
+    algorithm: parts[0],
+    n: Number(parts[1]),
+    r: Number(parts[2]),
+    p: Number(parts[3]),
+    salt: parts[4],
+    hash: parts[5],
+  };
+}
+
+function safeEqualString(left, right) {
+  const leftBuffer = Buffer.from(left);
+  const rightBuffer = Buffer.from(right);
+
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(leftBuffer, rightBuffer);
+}
+
+function verifyPassword(password, serializedHash) {
+  const parsed = parsePasswordHash(serializedHash);
+  const derivedKey = crypto.scryptSync(password, parsed.salt, 64, {
+    N: parsed.n,
+    r: parsed.r,
+    p: parsed.p,
+  });
+  const expectedKey = Buffer.from(parsed.hash, "base64url");
+
+  if (derivedKey.length !== expectedKey.length) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(derivedKey, expectedKey);
+}
+
+function validateRequestOrigin(req) {
+  const origin = req.headers.origin;
+
+  if (!origin) {
+    return true;
+  }
+
+  return origin === getRequestOrigin(req);
+}
+
+function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    let size = 0;
+
+    req.on("data", (chunk) => {
+      size += chunk.length;
+
+      if (size > 16 * 1024) {
+        reject(new Error("Request body too large."));
+        req.destroy();
+        return;
+      }
+
+      chunks.push(chunk);
+    });
+
+    req.on("end", () => {
+      resolve(Buffer.concat(chunks).toString("utf8"));
+    });
+
+    req.on("error", reject);
+  });
+}
+
+async function readJsonBody(req) {
+  const contentType = req.headers["content-type"] || "";
+
+  if (!contentType.toLowerCase().startsWith("application/json")) {
+    throw new Error("Expected application/json.");
+  }
+
+  const body = await readRequestBody(req);
+
+  if (!body) {
+    return {};
+  }
+
+  return JSON.parse(body);
+}
+
+function getLoginAttemptState(req) {
+  pruneLoginAttempts();
+  const key = getClientAddress(req);
+  const existing = loginAttempts.get(key);
+
+  if (!existing || now() - existing.windowStartedAt > LOGIN_WINDOW_MS) {
+    const fresh = { count: 0, windowStartedAt: now() };
+    loginAttempts.set(key, fresh);
+    return fresh;
+  }
+
+  return existing;
+}
+
+function recordFailedLogin(req) {
+  const state = getLoginAttemptState(req);
+  state.count += 1;
+}
+
+function clearFailedLogins(req) {
+  loginAttempts.delete(getClientAddress(req));
+}
+
+function isLoginBlocked(req) {
+  return getLoginAttemptState(req).count >= MAX_LOGIN_ATTEMPTS;
 }
 
 function hasRbcConfig() {
@@ -434,9 +597,87 @@ function getStatusPayload(session) {
   };
 }
 
+function getAdminStatusPayload(session) {
+  return {
+    configured: hasAdminConfig(),
+    authenticated: Boolean(session.adminAuthenticated),
+    username: session.adminAuthenticated ? session.adminUsername : null,
+    email: session.adminAuthenticated ? session.adminEmail : null,
+  };
+}
+
 async function handleApi(req, res) {
   const url = new URL(req.url, getRequestOrigin(req));
   const session = ensureSession(req, res);
+
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(req.method || "")) {
+    if (!validateRequestOrigin(req)) {
+      sendJson(req, res, 403, { error: "Invalid request origin." });
+      return;
+    }
+  }
+
+  if (url.pathname === "/api/admin/status" && req.method === "GET") {
+    sendJson(req, res, 200, getAdminStatusPayload(session));
+    return;
+  }
+
+  if (url.pathname === "/api/admin/login" && req.method === "POST") {
+    assertHttpsForSensitiveRoutes(req);
+
+    if (!hasAdminConfig()) {
+      sendJson(req, res, 400, {
+        error:
+          "Admin login is not configured. Set ADMIN_EMAIL, ADMIN_USERNAME, ADMIN_PASSWORD_HASH, and SESSION_SECRET.",
+      });
+      return;
+    }
+
+    if (isLoginBlocked(req)) {
+      sendJson(req, res, 429, {
+        error: "Too many failed login attempts. Try again later.",
+      });
+      return;
+    }
+
+    try {
+      const payload = await readJsonBody(req);
+      const email = String(payload.email || "").trim().toLowerCase();
+      const username = String(payload.username || "").trim();
+      const password = String(payload.password || "");
+      const config = getAdminConfig();
+      const emailMatches = safeEqualString(email, config.email.trim().toLowerCase());
+      const usernameMatches = safeEqualString(username, config.username.trim());
+      const passwordMatches = verifyPassword(password, config.passwordHash.trim());
+
+      if (!emailMatches || !usernameMatches || !passwordMatches) {
+        recordFailedLogin(req);
+        sendJson(req, res, 401, { error: "Invalid credentials." });
+        return;
+      }
+
+      clearFailedLogins(req);
+      session.adminAuthenticated = true;
+      session.adminUsername = config.username.trim();
+      session.adminEmail = config.email.trim().toLowerCase();
+      session.updatedAt = now();
+
+      sendJson(req, res, 200, getAdminStatusPayload(session));
+    } catch {
+      sendJson(req, res, 400, { error: "Invalid login payload." });
+    }
+
+    return;
+  }
+
+  if (url.pathname === "/api/admin/logout" && req.method === "POST") {
+    session.adminAuthenticated = false;
+    session.adminUsername = null;
+    session.adminEmail = null;
+    session.updatedAt = now();
+    sendJson(req, res, 200, getAdminStatusPayload(session));
+    return;
+  }
 
   if (url.pathname === "/api/rbc/status" && req.method === "GET") {
     sendJson(req, res, 200, getStatusPayload(session));

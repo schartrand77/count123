@@ -32,7 +32,10 @@
           <a href="#roadmap">Roadmap</a>
         </nav>
 
-        <a class="cta-button" href="#workspace">Launch Prototype</a>
+        <div class="topbar-actions">
+          <span class="admin-badge" id="admin-badge">Admin offline</span>
+          <a class="cta-button" href="#workspace">Launch Prototype</a>
+        </div>
       </header>
 
       <main>
@@ -176,6 +179,41 @@
                   Year-end supporting document missing for equipment purchase
                 </li>
               </ul>
+            </section>
+
+            <section class="glass large-panel">
+              <div class="panel-title-row">
+                <div>
+                  <p class="panel-label">Admin Access</p>
+                  <h4>Secure administrator login</h4>
+                </div>
+                <button class="secondary-button compact" id="admin-logout" type="button">Log Out</button>
+              </div>
+
+              <form class="admin-form" id="admin-login-form">
+                <label class="field">
+                  <span>Email</span>
+                  <input id="admin-email" name="email" type="email" autocomplete="email" required />
+                </label>
+                <label class="field">
+                  <span>Username</span>
+                  <input id="admin-username" name="username" type="text" autocomplete="username" required />
+                </label>
+                <label class="field field-wide">
+                  <span>Password</span>
+                  <input
+                    id="admin-password"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                  />
+                </label>
+                <div class="admin-actions">
+                  <button class="cta-button" id="admin-login-submit" type="submit">Sign In</button>
+                  <p class="admin-message" id="admin-message">Admin login is not configured yet.</p>
+                </div>
+              </form>
             </section>
 
             <section class="glass large-panel">
