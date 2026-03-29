@@ -73,6 +73,7 @@ function defaultStore() {
       bill: 800,
       purchaseOrder: 500,
       journal: 0,
+      bankTransaction: 0,
     },
     clients: [],
     vendors: [],
@@ -86,6 +87,8 @@ function defaultStore() {
     purchaseOrders: [],
     journalEntries: [],
     recurringTemplates: [],
+    bankAccounts: [],
+    bankTransactions: [],
     closeChecklist: [
       { id: "close_bank", label: "Review bank balances and cash movements", done: false },
       { id: "close_receivables", label: "Confirm open invoices and customer collections", done: false },
@@ -127,6 +130,10 @@ function normalizeStore(store) {
   normalized.recurringTemplates = Array.isArray(normalized.recurringTemplates)
     ? normalized.recurringTemplates
     : [];
+  normalized.bankAccounts = Array.isArray(normalized.bankAccounts) ? normalized.bankAccounts : [];
+  normalized.bankTransactions = Array.isArray(normalized.bankTransactions)
+    ? normalized.bankTransactions
+    : [];
   normalized.closeChecklist = Array.isArray(normalized.closeChecklist)
     ? normalized.closeChecklist
     : defaultCloseChecklist();
@@ -161,6 +168,17 @@ function normalizeStore(store) {
       ...(existing || {}),
     };
   });
+
+  normalized.bankTransactions = normalized.bankTransactions.map((transaction) => ({
+    status: "unmatched",
+    notes: "",
+    matchType: null,
+    matchId: null,
+    matchLabel: null,
+    matchedAt: null,
+    source: "manual",
+    ...transaction,
+  }));
 
   return normalized;
 }
@@ -315,6 +333,103 @@ function buildSummary(store, balances) {
   };
 }
 
+function buildCashflowTimeline(store) {
+  const periods = new Map();
+
+  for (const transaction of store.bankTransactions || []) {
+    if (!transaction.postedDate || transaction.status === "ignored") {
+      continue;
+    }
+
+    const period = String(transaction.postedDate).slice(0, 7);
+    const amount = toCurrencyAmount(transaction.amount);
+    const current = periods.get(period) || { period, inflow: 0, outflow: 0, net: 0 };
+
+    if (amount >= 0) {
+      current.inflow = toCurrencyAmount(current.inflow + amount);
+    } else {
+      current.outflow = toCurrencyAmount(current.outflow + Math.abs(amount));
+    }
+
+    current.net = toCurrencyAmount(current.inflow - current.outflow);
+    periods.set(period, current);
+  }
+
+  return [...periods.values()].sort((a, b) => b.period.localeCompare(a.period)).slice(0, 6);
+}
+
+function findBestBankSuggestion(store, transaction) {
+  const absoluteAmount = toCurrencyAmount(Math.abs(transaction.amount || 0));
+  const description = String(transaction.description || "").toLowerCase();
+  const candidates = [];
+
+  for (const invoice of store.invoices.filter((item) => item.balanceDue > 0)) {
+    let score = 0;
+    if (toCurrencyAmount(invoice.balanceDue) === absoluteAmount) score += 3;
+    if (description.includes(String(invoice.number || "").toLowerCase())) score += 3;
+    if (description.includes(String(invoice.clientName || "").toLowerCase())) score += 2;
+    if (transaction.amount > 0 && score > 0) {
+      candidates.push({
+        score,
+        targetType: "invoice",
+        targetId: invoice.id,
+        label: `${invoice.number} | ${invoice.clientName}`,
+      });
+    }
+  }
+
+  for (const bill of store.bills.filter((item) => item.balanceDue > 0)) {
+    let score = 0;
+    if (toCurrencyAmount(bill.balanceDue) === absoluteAmount) score += 3;
+    if (description.includes(String(bill.number || "").toLowerCase())) score += 3;
+    if (description.includes(String(bill.vendorName || "").toLowerCase())) score += 2;
+    if (transaction.amount < 0 && score > 0) {
+      candidates.push({
+        score,
+        targetType: "bill",
+        targetId: bill.id,
+        label: `${bill.number} | ${bill.vendorName}`,
+      });
+    }
+  }
+
+  candidates.sort((a, b) => b.score - a.score || a.label.localeCompare(b.label));
+  return candidates[0] || null;
+}
+
+function buildBankingPayload(store) {
+  const transactions = [...(store.bankTransactions || [])]
+    .sort((a, b) => {
+      const dateCompare = String(b.postedDate || "").localeCompare(String(a.postedDate || ""));
+      return dateCompare || String(b.createdAt || "").localeCompare(String(a.createdAt || ""));
+    })
+    .map((transaction) => ({
+      ...transaction,
+      suggestion: transaction.status === "unmatched" ? findBestBankSuggestion(store, transaction) : null,
+    }));
+
+  const unmatched = transactions.filter((item) => item.status === "unmatched");
+  const matched = transactions.filter((item) => item.status === "matched");
+  const ignored = transactions.filter((item) => item.status === "ignored");
+  const suggested = unmatched.filter((item) => item.suggestion);
+
+  return {
+    accounts: [...(store.bankAccounts || [])].sort((a, b) => a.name.localeCompare(b.name)),
+    transactions,
+    reconciliation: {
+      unmatchedCount: unmatched.length,
+      matchedCount: matched.length,
+      ignoredCount: ignored.length,
+      suggestedCount: suggested.length,
+      unmatchedAmount: toCurrencyAmount(
+        unmatched.reduce((sum, item) => sum + Math.abs(Number(item.amount || 0)), 0)
+      ),
+    },
+    timeline: buildCashflowTimeline(store),
+    exceptionQueue: unmatched,
+  };
+}
+
 function buildBootstrapPayload(store, session) {
   const balances = computeAccountBalances(store);
   const reports = buildReports(store, balances);
@@ -346,6 +461,7 @@ function buildBootstrapPayload(store, session) {
     recurringTemplates: [...(store.recurringTemplates || [])].sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt)
     ),
+    banking: buildBankingPayload(store),
     closeChecklist: [...(store.closeChecklist || [])],
     reports,
     tax,
@@ -750,6 +866,179 @@ function toggleChecklistItem(store, itemId) {
   item.done = !item.done;
   item.updatedAt = new Date().toISOString();
   return item;
+}
+
+function persistBankAccounts(store, accounts, source) {
+  const mappedAccounts = (accounts || []).map((account, index) => ({
+    id: String(account.id || account.maskedId || `bank_account_${index + 1}`),
+    maskedId: String(account.id || account.maskedId || ""),
+    name: String(account.name || "Business account"),
+    type: String(account.type || "Business account"),
+    balance: account.balance == null ? null : toCurrencyAmount(account.balance),
+    availableBalance:
+      account.availableBalance == null ? null : toCurrencyAmount(account.availableBalance),
+    currency: String(account.currency || store.company.currency || "CAD"),
+    source: source || "RBC",
+    lastSyncedAt: new Date().toISOString(),
+  }));
+
+  store.bankAccounts = mappedAccounts;
+  return store.bankAccounts;
+}
+
+function createBankTransaction(store, payload) {
+  const amount = toCurrencyAmount(payload.amount);
+  const sequence = nextCounter(store, "bankTransaction");
+  const accountName = String(payload.accountName || "").trim();
+  const description = String(payload.description || "").trim();
+  const postedDate = String(payload.postedDate || "").trim();
+
+  if (!accountName || !description || !postedDate || !amount) {
+    throw new Error("Account name, posted date, description, and non-zero amount are required.");
+  }
+
+  const transaction = {
+    id: `bank_tx_${sequence}`,
+    externalId: payload.externalId ? String(payload.externalId) : null,
+    accountId: String(payload.accountId || accountName),
+    accountName,
+    postedDate,
+    description,
+    amount,
+    currency: String(payload.currency || store.company.currency || "CAD"),
+    source: String(payload.source || "manual"),
+    status: "unmatched",
+    notes: String(payload.notes || "").trim(),
+    matchType: null,
+    matchId: null,
+    matchLabel: null,
+    matchedAt: null,
+    createdAt: new Date().toISOString(),
+  };
+
+  store.bankTransactions.push(transaction);
+  return transaction;
+}
+
+function importBankTransactions(store, payload) {
+  const transactions = Array.isArray(payload.transactions) ? payload.transactions : [payload];
+  const imported = [];
+
+  for (const item of transactions) {
+    const externalId = item.externalId ? String(item.externalId) : null;
+    if (externalId && store.bankTransactions.some((entry) => entry.externalId === externalId)) {
+      continue;
+    }
+
+    imported.push(createBankTransaction(store, item));
+  }
+
+  return imported;
+}
+
+function findBankTransaction(store, transactionId) {
+  const transaction = store.bankTransactions.find((item) => item.id === transactionId);
+
+  if (!transaction) {
+    throw new Error("Bank transaction not found.");
+  }
+
+  return transaction;
+}
+
+function setBankTransactionIgnored(store, transactionId) {
+  const transaction = findBankTransaction(store, transactionId);
+  transaction.status = transaction.status === "ignored" ? "unmatched" : "ignored";
+  transaction.notes = transaction.status === "ignored" ? "Ignored during reconciliation." : "";
+  transaction.matchedAt = transaction.status === "ignored" ? new Date().toISOString() : null;
+  return transaction;
+}
+
+function matchBankTransaction(store, transactionId, payload) {
+  const transaction = findBankTransaction(store, transactionId);
+  const matchType = String(payload.matchType || "").trim().toLowerCase();
+  const amount = toCurrencyAmount(payload.amount || Math.abs(transaction.amount));
+
+  if (transaction.status === "matched") {
+    throw new Error("Bank transaction is already matched.");
+  }
+
+  if (!amount || amount > Math.abs(transaction.amount)) {
+    throw new Error("Invalid match amount.");
+  }
+
+  if (matchType === "invoice") {
+    if (transaction.amount <= 0) {
+      throw new Error("Invoice matches require an inflow transaction.");
+    }
+
+    const invoice = payInvoice(store, payload.targetId, {
+      paymentDate: payload.paymentDate || transaction.postedDate,
+      amount,
+    });
+    transaction.status = "matched";
+    transaction.matchType = "invoice";
+    transaction.matchId = invoice.id;
+    transaction.matchLabel = invoice.number;
+    transaction.notes = String(payload.notes || `Matched to ${invoice.number}`);
+    transaction.matchedAt = new Date().toISOString();
+    return transaction;
+  }
+
+  if (matchType === "bill") {
+    if (transaction.amount >= 0) {
+      throw new Error("Bill matches require an outflow transaction.");
+    }
+
+    const bill = payBill(store, payload.targetId, {
+      paymentDate: payload.paymentDate || transaction.postedDate,
+      amount,
+    });
+    transaction.status = "matched";
+    transaction.matchType = "bill";
+    transaction.matchId = bill.id;
+    transaction.matchLabel = bill.number;
+    transaction.notes = String(payload.notes || `Matched to ${bill.number}`);
+    transaction.matchedAt = new Date().toISOString();
+    return transaction;
+  }
+
+  if (matchType === "journal") {
+    const offsetAccountCode = String(payload.offsetAccountCode || "").trim();
+
+    if (!offsetAccountCode) {
+      throw new Error("Offset account code is required for journal matching.");
+    }
+
+    requireAccount(store, offsetAccountCode);
+
+    recordJournalEntry(store, {
+      date: payload.paymentDate || transaction.postedDate,
+      memo: String(payload.memo || transaction.description || "Bank transaction"),
+      sourceType: "bank_transaction",
+      sourceId: transaction.id,
+      lines:
+        transaction.amount >= 0
+          ? [
+              { accountCode: "1000", debit: amount, credit: 0, memo: transaction.description },
+              { accountCode: offsetAccountCode, debit: 0, credit: amount, memo: transaction.description },
+            ]
+          : [
+              { accountCode: offsetAccountCode, debit: amount, credit: 0, memo: transaction.description },
+              { accountCode: "1000", debit: 0, credit: amount, memo: transaction.description },
+            ],
+    });
+
+    transaction.status = "matched";
+    transaction.matchType = "journal";
+    transaction.matchId = offsetAccountCode;
+    transaction.matchLabel = offsetAccountCode;
+    transaction.notes = String(payload.notes || `Posted to ${offsetAccountCode}`);
+    transaction.matchedAt = new Date().toISOString();
+    return transaction;
+  }
+
+  throw new Error("Unsupported bank match type.");
 }
 
 function toCsv(rows, headers) {
@@ -1330,6 +1619,79 @@ async function fetchRbcAccounts(session) {
   return session.accounts;
 }
 
+async function fetchRbcTransactions(session) {
+  if (!process.env.RBC_TRANSACTIONS_URL) {
+    return [];
+  }
+
+  validateUrlEnv("RBC_TRANSACTIONS_URL");
+
+  const response = await fetch(process.env.RBC_TRANSACTIONS_URL, {
+    headers: {
+      Authorization: `${session.tokenType} ${session.accessToken}`,
+      Accept: "application/json",
+    },
+  });
+
+  const payload = await response.json();
+
+  if (!response.ok) {
+    throw new Error("Transaction sync failed.");
+  }
+
+  const transactions = Array.isArray(payload)
+    ? payload
+    : Array.isArray(payload.transactions)
+      ? payload.transactions
+      : [];
+
+  return transactions.map((transaction, index) => {
+    const rawAmount =
+      transaction.amount?.value ??
+      transaction.amount ??
+      transaction.transactionAmount ??
+      transaction.signedAmount ??
+      0;
+
+    return {
+      externalId: String(
+        transaction.id ||
+          transaction.transactionId ||
+          transaction.reference ||
+          `rbc_tx_${Date.now()}_${index}`
+      ),
+      accountId: String(transaction.accountId || transaction.account?.id || "RBC"),
+      accountName: String(
+        transaction.accountName ||
+          transaction.account?.name ||
+          transaction.accountNickname ||
+          "RBC account"
+      ),
+      postedDate: String(
+        transaction.postedDate ||
+          transaction.bookingDate ||
+          transaction.date ||
+          new Date().toISOString().slice(0, 10)
+      ),
+      description: String(
+        transaction.description ||
+          transaction.memo ||
+          transaction.narrative ||
+          transaction.reference ||
+          "RBC transaction"
+      ),
+      amount: toCurrencyAmount(rawAmount),
+      currency: String(
+        transaction.currency ||
+          transaction.amount?.currency ||
+          transaction.currencyCode ||
+          "CAD"
+      ),
+      source: "RBC",
+    };
+  });
+}
+
 function getRbcStatusPayload(session) {
   return {
     provider: "RBC",
@@ -1338,6 +1700,7 @@ function getRbcStatusPayload(session) {
     expiresAt: session.expiresAt,
     lastSyncAt: session.lastSyncAt,
     accounts: session.accounts,
+    transactionSyncConfigured: Boolean(process.env.RBC_TRANSACTIONS_URL),
   };
 }
 
@@ -1653,6 +2016,73 @@ async function handleApi(req, res) {
     return;
   }
 
+  if (url.pathname === "/api/bank/transactions" && req.method === "POST") {
+    await handleDataMutation(req, res, session, (store, payload) => importBankTransactions(store, payload));
+    return;
+  }
+
+  if (url.pathname === "/api/bank/sync" && req.method === "POST") {
+    if (!requireAdmin(req, res, session)) {
+      return;
+    }
+
+    assertHttpsForSensitiveRoutes(req);
+
+    try {
+      const store = readStore();
+
+      if (isConnected(session) && session.accounts?.length) {
+        persistBankAccounts(store, session.accounts, "RBC");
+      }
+
+      let imported = [];
+
+      if (isConnected(session) && process.env.RBC_TRANSACTIONS_URL) {
+        imported = importBankTransactions(store, {
+          transactions: await fetchRbcTransactions(session),
+        });
+      }
+
+      writeStore(store);
+      sendJson(req, res, 200, {
+        ok: true,
+        result: {
+          accounts: store.bankAccounts.length,
+          importedTransactions: imported.length,
+        },
+        app: buildBootstrapPayload(store, session),
+        bank: getRbcStatusPayload(session),
+      });
+    } catch (error) {
+      sendJson(req, res, 400, { error: error.message || "Bank sync failed." });
+    }
+    return;
+  }
+
+  if (
+    url.pathname.startsWith("/api/bank/transactions/") &&
+    url.pathname.endsWith("/match") &&
+    req.method === "POST"
+  ) {
+    const transactionId = url.pathname.split("/")[4];
+    await handleDataMutation(req, res, session, (store, payload) =>
+      matchBankTransaction(store, transactionId, payload)
+    );
+    return;
+  }
+
+  if (
+    url.pathname.startsWith("/api/bank/transactions/") &&
+    url.pathname.endsWith("/ignore") &&
+    req.method === "POST"
+  ) {
+    const transactionId = url.pathname.split("/")[4];
+    await handleDataMutation(req, res, session, (store) =>
+      setBankTransactionIgnored(store, transactionId)
+    );
+    return;
+  }
+
   if (url.pathname === "/api/recurring-templates" && req.method === "POST") {
     await handleDataMutation(req, res, session, createRecurringTemplate);
     return;
@@ -1807,7 +2237,10 @@ async function handleApi(req, res) {
 
     try {
       await exchangeCodeForToken(session, code);
-      await fetchRbcAccounts(session);
+      const accounts = await fetchRbcAccounts(session);
+      const store = readStore();
+      persistBankAccounts(store, accounts, "RBC");
+      writeStore(store);
       sendHtml(
         req,
         res,

@@ -321,13 +321,37 @@
               <section class="panel">
                 <div class="panel-header">
                   <div>
-                    <p class="eyebrow">Bank</p>
-                    <h3>RBC integration</h3>
+                    <p class="eyebrow">Phase 3</p>
+                    <h3>Banking and sync</h3>
                   </div>
-                  <button class="ghost-button" id="connect-bank" type="button">Connect RBC</button>
+                  <div class="row-actions">
+                    <button class="ghost-button" id="sync-bank" type="button">Sync Bank</button>
+                    <button class="ghost-button" id="connect-bank" type="button">Connect RBC</button>
+                  </div>
                 </div>
                 <div class="summary-grid compact" id="bank-summary-grid"></div>
                 <div class="list-table" id="bank-accounts"></div>
+                <form class="record-form" id="bank-transaction-form">
+                  <h4>Import Bank Transaction</h4>
+                  <label class="field">
+                    <span>Account Name</span>
+                    <input name="accountName" type="text" required />
+                  </label>
+                  <label class="field">
+                    <span>Posted Date</span>
+                    <input name="postedDate" type="date" required />
+                  </label>
+                  <label class="field">
+                    <span>Description</span>
+                    <input name="description" type="text" required />
+                  </label>
+                  <label class="field">
+                    <span>Amount</span>
+                    <input name="amount" type="number" step="0.01" required />
+                  </label>
+                  <p class="helper-text">Use positive amounts for deposits and negative amounts for withdrawals.</p>
+                  <button class="primary-button" type="submit">Import Transaction</button>
+                </form>
               </section>
 
               <section class="panel">
@@ -433,6 +457,36 @@
                   </div>
                 </div>
                 <div class="list-table" id="journal-list"></div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Phase 3</p>
+                    <h3>Reconciliation queue</h3>
+                  </div>
+                </div>
+                <div class="list-table" id="bank-reconciliation-list"></div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Phase 3</p>
+                    <h3>Cashflow timeline</h3>
+                  </div>
+                </div>
+                <div class="list-table" id="bank-timeline-list"></div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Phase 3</p>
+                    <h3>Bank transactions</h3>
+                  </div>
+                </div>
+                <div class="list-table" id="bank-transaction-list"></div>
               </section>
 
               <section class="panel">

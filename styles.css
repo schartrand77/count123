@@ -311,6 +311,14 @@ button {
   font-size: 0.98rem;
 }
 
+.amount-inflow {
+  color: var(--accent);
+}
+
+.amount-outflow {
+  color: #ffb482;
+}
+
 .row-actions {
   display: flex;
   flex-wrap: wrap;

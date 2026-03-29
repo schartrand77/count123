@@ -15,6 +15,9 @@ const el = {
   summaryGrid: document.getElementById("summary-grid"),
   bankSummaryGrid: document.getElementById("bank-summary-grid"),
   bankAccounts: document.getElementById("bank-accounts"),
+  bankTransactionList: document.getElementById("bank-transaction-list"),
+  bankReconciliationList: document.getElementById("bank-reconciliation-list"),
+  bankTimelineList: document.getElementById("bank-timeline-list"),
   invoiceList: document.getElementById("invoice-list"),
   billList: document.getElementById("bill-list"),
   purchaseOrderList: document.getElementById("purchase-order-list"),
@@ -26,6 +29,7 @@ const el = {
   vendorList: document.getElementById("vendor-list"),
   recurringList: document.getElementById("recurring-list"),
   checklistList: document.getElementById("checklist-list"),
+  syncBankButton: document.getElementById("sync-bank"),
   connectBankButton: document.getElementById("connect-bank"),
   clientForm: document.getElementById("client-form"),
   vendorForm: document.getElementById("vendor-form"),
@@ -36,6 +40,7 @@ const el = {
   purchaseOrderForm: document.getElementById("purchase-order-form"),
   journalForm: document.getElementById("journal-form"),
   recurringForm: document.getElementById("recurring-form"),
+  bankTransactionForm: document.getElementById("bank-transaction-form"),
   companyNameInput: document.getElementById("company-name-input"),
   companyCurrencyInput: document.getElementById("company-currency-input"),
   companyTaxNameInput: document.getElementById("company-tax-name-input"),
@@ -144,6 +149,21 @@ function paymentHistoryHtml(history) {
     .join(" | ");
 
   return `<small>${recent}</small>`;
+}
+
+function findInvoice(identifier) {
+  const value = String(identifier || "").trim().toLowerCase();
+  return state.app.invoices.find(
+    (invoice) =>
+      invoice.id.toLowerCase() === value || String(invoice.number || "").toLowerCase() === value
+  );
+}
+
+function findBill(identifier) {
+  const value = String(identifier || "").trim().toLowerCase();
+  return state.app.bills.find(
+    (bill) => bill.id.toLowerCase() === value || String(bill.number || "").toLowerCase() === value
+  );
 }
 
 function renderInvoices() {
@@ -367,9 +387,19 @@ function renderMasterLists() {
 
 function renderBank() {
   const bank = state.bank || { configured: false, connected: false, accounts: [] };
+  const banking = state.app.banking || {
+    accounts: [],
+    transactions: [],
+    reconciliation: { unmatchedCount: 0, matchedCount: 0, ignoredCount: 0, suggestedCount: 0, unmatchedAmount: 0 },
+    timeline: [],
+    exceptionQueue: [],
+  };
   el.bankSummaryGrid.innerHTML = [
     { label: "Status", value: bank.connected ? "Connected" : bank.configured ? "Ready" : "Not configured" },
-    { label: "Accounts", value: String(bank.accounts.length) },
+    { label: "Accounts", value: String(banking.accounts.length || bank.accounts.length) },
+    { label: "Transactions", value: String(banking.transactions.length) },
+    { label: "Unmatched", value: String(banking.reconciliation.unmatchedCount) },
+    { label: "Suggested", value: String(banking.reconciliation.suggestedCount) },
     { label: "Last Sync", value: bank.lastSyncAt ? new Date(bank.lastSyncAt).toLocaleString() : "Pending" },
   ]
     .map(
@@ -382,10 +412,12 @@ function renderBank() {
     )
     .join("");
 
-  if (!bank.accounts.length) {
+  const visibleAccounts = banking.accounts.length ? banking.accounts : bank.accounts;
+
+  if (!visibleAccounts.length) {
     empty(el.bankAccounts, "Connect RBC after signing in to sync bank balances.");
   } else {
-    el.bankAccounts.innerHTML = bank.accounts
+    el.bankAccounts.innerHTML = visibleAccounts
       .map(
         (account) => `
           <article class="data-row">
@@ -405,6 +437,114 @@ function renderBank() {
   }
 
   el.connectBankButton.disabled = !bank.configured;
+  el.syncBankButton.disabled = !bank.configured && !visibleAccounts.length;
+}
+
+function renderBankTimeline() {
+  const timeline = state.app.banking?.timeline || [];
+
+  if (!timeline.length) {
+    empty(el.bankTimelineList, "Import bank transactions to build the cashflow timeline.");
+    return;
+  }
+
+  el.bankTimelineList.innerHTML = timeline
+    .map(
+      (period) => `
+        <article class="table-row">
+          <div>
+            <span>Period</span>
+            <strong>${escapeHtml(period.period)}</strong>
+          </div>
+          <div>
+            <span>Inflow</span>
+            <strong>${currency(period.inflow)}</strong>
+          </div>
+          <div>
+            <span>Outflow</span>
+            <strong>${currency(period.outflow)}</strong>
+          </div>
+          <div>
+            <span>Net</span>
+            <strong>${currency(period.net)}</strong>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderBankTransactions() {
+  const transactions = state.app.banking?.transactions || [];
+
+  if (!transactions.length) {
+    empty(el.bankTransactionList, "No bank transactions imported yet.");
+    return;
+  }
+
+  el.bankTransactionList.innerHTML = transactions
+    .map((transaction) => {
+      const suggestion = transaction.suggestion
+        ? `<small>Suggestion: ${escapeHtml(transaction.suggestion.label)} (${escapeHtml(transaction.suggestion.targetType)})</small>`
+        : "<small>No suggested match.</small>";
+
+      return `
+        <article class="data-row">
+          <div>
+            <h4>${escapeHtml(transaction.description)}</h4>
+            <p>${escapeHtml(transaction.accountName)} | ${escapeHtml(transaction.postedDate)}</p>
+            <small>${escapeHtml(transaction.status)}${transaction.matchLabel ? ` | ${escapeHtml(transaction.matchLabel)}` : ""}</small>
+            ${suggestion}
+          </div>
+          <div class="row-meta">
+            <strong class="${transaction.amount >= 0 ? "amount-inflow" : "amount-outflow"}">${currency(Math.abs(transaction.amount))}</strong>
+            <span>${transaction.amount >= 0 ? "Inflow" : "Outflow"}</span>
+            <div class="row-actions">
+              ${
+                transaction.status === "unmatched" && transaction.suggestion
+                  ? `<button class="ghost-button action-button" data-action="bank-match-suggested" data-id="${escapeHtml(transaction.id)}">Accept Suggestion</button>`
+                  : ""
+              }
+              ${
+                transaction.status === "unmatched"
+                  ? `<button class="ghost-button action-button" data-action="bank-match-record" data-kind="${transaction.amount >= 0 ? "invoice" : "bill"}" data-id="${escapeHtml(transaction.id)}">Match ${transaction.amount >= 0 ? "Invoice" : "Bill"}</button>`
+                  : ""
+              }
+              ${
+                transaction.status === "unmatched"
+                  ? `<button class="ghost-button action-button" data-action="bank-match-journal" data-id="${escapeHtml(transaction.id)}">Post Journal</button>`
+                  : ""
+              }
+              <button class="ghost-button action-button" data-action="bank-ignore" data-id="${escapeHtml(transaction.id)}">${transaction.status === "ignored" ? "Restore" : "Ignore"}</button>
+            </div>
+          </div>
+        </article>
+      `;
+    })
+    .join("");
+}
+
+function renderReconciliationQueue() {
+  const queue = state.app.banking?.exceptionQueue || [];
+
+  if (!queue.length) {
+    empty(el.bankReconciliationList, "No reconciliation exceptions. Bank activity is clear.");
+    return;
+  }
+
+  el.bankReconciliationList.innerHTML = queue
+    .map(
+      (transaction) => `
+        <article class="data-row compact-row">
+          <div>
+            <h4>${escapeHtml(transaction.accountName)} | ${escapeHtml(transaction.description)}</h4>
+            <small>${escapeHtml(transaction.postedDate)} | ${currency(Math.abs(transaction.amount))}</small>
+            <small>${transaction.suggestion ? `Suggested ${escapeHtml(transaction.suggestion.targetType)}: ${escapeHtml(transaction.suggestion.label)}` : "Manual review required"}</small>
+          </div>
+        </article>
+      `
+    )
+    .join("");
 }
 
 function renderRecurringTemplates() {
@@ -501,6 +641,9 @@ function renderWorkspace() {
   renderTaxAndReports();
   renderMasterLists();
   renderBank();
+  renderBankTimeline();
+  renderBankTransactions();
+  renderReconciliationQueue();
   renderRecurringTemplates();
   renderChecklist();
 }
@@ -638,6 +781,14 @@ el.recurringForm.addEventListener("submit", async (event) => {
   }));
 });
 
+el.bankTransactionForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitJsonForm(el.bankTransactionForm, "/api/bank/transactions", (payload) => ({
+    ...payload,
+    amount: Number(payload.amount),
+  }));
+});
+
 document.body.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-action]");
   if (!button) {
@@ -728,6 +879,60 @@ document.body.addEventListener("click", async (event) => {
     if (button.dataset.action === "toggle-checklist") {
       await promptAndPost(`/api/close-checklist/${button.dataset.id}/toggle`, () => ({}));
     }
+
+    if (button.dataset.action === "bank-match-suggested") {
+      const transaction = state.app.banking.transactions.find((item) => item.id === button.dataset.id);
+      if (!transaction?.suggestion) {
+        return;
+      }
+
+      await promptAndPost(`/api/bank/transactions/${button.dataset.id}/match`, () => ({
+        matchType: transaction.suggestion.targetType,
+        targetId: transaction.suggestion.targetId,
+        paymentDate: transaction.postedDate,
+        amount: Math.abs(Number(transaction.amount)),
+      }));
+    }
+
+    if (button.dataset.action === "bank-match-record") {
+      const kind = button.dataset.kind;
+      const rawIdentifier = window.prompt(
+        `${kind === "invoice" ? "Invoice" : "Bill"} number or id`
+      );
+      if (!rawIdentifier) return;
+
+      const record = kind === "invoice" ? findInvoice(rawIdentifier) : findBill(rawIdentifier);
+      if (!record) {
+        throw new Error(`${kind === "invoice" ? "Invoice" : "Bill"} not found.`);
+      }
+
+      const transaction = state.app.banking.transactions.find((item) => item.id === button.dataset.id);
+      await promptAndPost(`/api/bank/transactions/${button.dataset.id}/match`, () => ({
+        matchType: kind,
+        targetId: record.id,
+        paymentDate: transaction?.postedDate || today(),
+        amount: Math.abs(Number(transaction?.amount || 0)),
+      }));
+    }
+
+    if (button.dataset.action === "bank-match-journal") {
+      const transaction = state.app.banking.transactions.find((item) => item.id === button.dataset.id);
+      const offsetAccountCode = window.prompt("Offset account code", "6100");
+      if (!offsetAccountCode) return;
+      const memo = window.prompt("Journal memo", transaction?.description || "Bank transaction");
+      if (memo === null) return;
+
+      await promptAndPost(`/api/bank/transactions/${button.dataset.id}/match`, () => ({
+        matchType: "journal",
+        offsetAccountCode,
+        memo,
+        paymentDate: transaction?.postedDate || today(),
+      }));
+    }
+
+    if (button.dataset.action === "bank-ignore") {
+      await promptAndPost(`/api/bank/transactions/${button.dataset.id}/ignore`, () => ({}));
+    }
   } catch (error) {
     el.adminMessage.textContent = error.message;
   }
@@ -737,6 +942,17 @@ el.connectBankButton.addEventListener("click", async () => {
   try {
     const payload = await api("/api/rbc/connect-url", { method: "GET", headers: {} });
     window.location.href = payload.url;
+  } catch (error) {
+    el.adminMessage.textContent = error.message;
+  }
+});
+
+el.syncBankButton.addEventListener("click", async () => {
+  try {
+    const result = await api("/api/bank/sync", { method: "POST", body: JSON.stringify({}) });
+    state.app = result.app;
+    state.bank = result.bank || (await api("/api/rbc/status", { method: "GET", headers: {} }));
+    renderWorkspace();
   } catch (error) {
     el.adminMessage.textContent = error.message;
   }

@@ -159,6 +159,10 @@ Goal: connect bank activity to the ledger with fewer manual adjustments.
 - Reconciliation workspace with exception handling
 - Cashflow timeline and sync health monitoring
 
+Current status:
+- Completed.
+- Persisted bank accounts and bank transactions, manual bank imports, optional RBC transaction sync when `RBC_TRANSACTIONS_URL` is supplied, reconciliation suggestions, invoice/bill/journal matching, exception handling, and cashflow timeline views are now implemented.
+
 ### Phase 4: Compliance and Controls
 
 Goal: make the app defensible for real business use beyond a single admin operator.
