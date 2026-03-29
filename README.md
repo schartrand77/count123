@@ -145,6 +145,10 @@ Goal: reduce manual accounting work across the monthly operating cycle.
 - Month-end review queue and close checklist
 - Exportable statements and transaction reports
 
+Current status:
+- Completed.
+- Partial payment history, recurring invoice and bill templates, invoice/bill/PO workflow states with notes, month-end checklist tracking, and CSV exports are now implemented in the app.
+
 ### Phase 3: Banking and Reconciliation
 
 Goal: connect bank activity to the ledger with fewer manual adjustments.

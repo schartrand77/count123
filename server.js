@@ -85,13 +85,90 @@ function defaultStore() {
     bills: [],
     purchaseOrders: [],
     journalEntries: [],
+    recurringTemplates: [],
+    closeChecklist: [
+      { id: "close_bank", label: "Review bank balances and cash movements", done: false },
+      { id: "close_receivables", label: "Confirm open invoices and customer collections", done: false },
+      { id: "close_payables", label: "Review supplier bills and scheduled payments", done: false },
+      { id: "close_tax", label: "Validate GST/HST balances and remittance position", done: false },
+      { id: "close_reports", label: "Review P&L and balance sheet before close", done: false },
+    ],
   };
+}
+
+function defaultCloseChecklist() {
+  return defaultStore().closeChecklist.map((item) => ({ ...item }));
+}
+
+function normalizeStore(store) {
+  const normalized = store && typeof store === "object" ? store : {};
+
+  normalized.company = {
+    ...defaultStore().company,
+    ...(normalized.company || {}),
+  };
+
+  normalized.counters = {
+    ...defaultStore().counters,
+    ...(normalized.counters || {}),
+  };
+
+  normalized.clients = Array.isArray(normalized.clients) ? normalized.clients : [];
+  normalized.vendors = Array.isArray(normalized.vendors) ? normalized.vendors : [];
+  normalized.accounts = Array.isArray(normalized.accounts) ? normalized.accounts : [];
+  normalized.invoices = Array.isArray(normalized.invoices) ? normalized.invoices : [];
+  normalized.bills = Array.isArray(normalized.bills) ? normalized.bills : [];
+  normalized.purchaseOrders = Array.isArray(normalized.purchaseOrders)
+    ? normalized.purchaseOrders
+    : [];
+  normalized.journalEntries = Array.isArray(normalized.journalEntries)
+    ? normalized.journalEntries
+    : [];
+  normalized.recurringTemplates = Array.isArray(normalized.recurringTemplates)
+    ? normalized.recurringTemplates
+    : [];
+  normalized.closeChecklist = Array.isArray(normalized.closeChecklist)
+    ? normalized.closeChecklist
+    : defaultCloseChecklist();
+
+  normalized.invoices = normalized.invoices.map((invoice) => ({
+    paymentHistory: [],
+    notes: "",
+    status: "sent",
+    ...invoice,
+    paymentHistory: Array.isArray(invoice.paymentHistory) ? invoice.paymentHistory : [],
+  }));
+
+  normalized.bills = normalized.bills.map((bill) => ({
+    paymentHistory: [],
+    notes: "",
+    status: "open",
+    ...bill,
+    paymentHistory: Array.isArray(bill.paymentHistory) ? bill.paymentHistory : [],
+  }));
+
+  normalized.purchaseOrders = normalized.purchaseOrders.map((order) => ({
+    notes: "",
+    status: "draft",
+    convertedBillId: null,
+    ...order,
+  }));
+
+  normalized.closeChecklist = defaultCloseChecklist().map((defaultItem) => {
+    const existing = normalized.closeChecklist.find((item) => item.id === defaultItem.id);
+    return {
+      ...defaultItem,
+      ...(existing || {}),
+    };
+  });
+
+  return normalized;
 }
 
 function readStore() {
   ensureDataStore();
   const raw = fs.readFileSync(STORE_FILE, "utf8");
-  const store = JSON.parse(raw);
+  const store = normalizeStore(JSON.parse(raw));
 
   for (const account of DEFAULT_ACCOUNTS) {
     if (!store.accounts.some((existing) => existing.code === account.code)) {
@@ -266,6 +343,10 @@ function buildBootstrapPayload(store, session) {
     journalEntries: [...store.journalEntries].sort((a, b) =>
       b.createdAt.localeCompare(a.createdAt)
     ),
+    recurringTemplates: [...(store.recurringTemplates || [])].sort((a, b) =>
+      b.createdAt.localeCompare(a.createdAt)
+    ),
+    closeChecklist: [...(store.closeChecklist || [])],
     reports,
     tax,
   };
@@ -333,7 +414,9 @@ function createInvoice(store, payload) {
     taxAmount,
     total,
     balanceDue: total,
-    status: "sent",
+    status: String(payload.status || "sent"),
+    notes: String(payload.notes || "").trim(),
+    paymentHistory: [],
     createdAt: new Date().toISOString(),
     paidAt: null,
   };
@@ -382,6 +465,12 @@ function payInvoice(store, invoiceId, payload) {
     ],
   });
 
+  invoice.paymentHistory.push({
+    id: `invoice_payment_${invoice.paymentHistory.length + 1}`,
+    amount,
+    paymentDate: payload.paymentDate,
+    createdAt: new Date().toISOString(),
+  });
   invoice.balanceDue = toCurrencyAmount(invoice.balanceDue - amount);
   invoice.status = invoice.balanceDue <= 0 ? "paid" : "partial";
   invoice.paidAt = payload.paymentDate;
@@ -415,7 +504,9 @@ function createBill(store, payload) {
     taxAmount,
     total,
     balanceDue: total,
-    status: "open",
+    status: String(payload.status || "open"),
+    notes: String(payload.notes || "").trim(),
+    paymentHistory: [],
     createdAt: new Date().toISOString(),
     paidAt: null,
   };
@@ -466,6 +557,12 @@ function payBill(store, billId, payload) {
     ],
   });
 
+  bill.paymentHistory.push({
+    id: `bill_payment_${bill.paymentHistory.length + 1}`,
+    amount,
+    paymentDate: payload.paymentDate,
+    createdAt: new Date().toISOString(),
+  });
   bill.balanceDue = toCurrencyAmount(bill.balanceDue - amount);
   bill.status = bill.balanceDue <= 0 ? "paid" : "partial";
   bill.paidAt = payload.paymentDate;
@@ -488,7 +585,8 @@ function createPurchaseOrder(store, payload) {
     description: String(payload.description || "").trim(),
     amount: toCurrencyAmount(payload.amount),
     expectedDate: payload.expectedDate,
-    status: "open",
+    status: String(payload.status || "draft"),
+    notes: String(payload.notes || "").trim(),
     createdAt: new Date().toISOString(),
     convertedBillId: null,
   };
@@ -543,6 +641,128 @@ function createManualJournal(store, payload) {
       },
     ],
   });
+}
+
+function updateRecordWorkflow(record, payload) {
+  if (payload.status) {
+    record.status = String(payload.status).trim().toLowerCase();
+  }
+
+  if (Object.prototype.hasOwnProperty.call(payload, "notes")) {
+    record.notes = String(payload.notes || "").trim();
+  }
+
+  record.updatedAt = new Date().toISOString();
+  return record;
+}
+
+function createRecurringTemplate(store, payload) {
+  const type = String(payload.type || "").trim().toLowerCase();
+
+  if (!["invoice", "bill"].includes(type)) {
+    throw new Error("Recurring template type must be invoice or bill.");
+  }
+
+  const template = {
+    id: `recurring_${store.recurringTemplates.length + 1}`,
+    type,
+    label: String(payload.label || "").trim(),
+    clientId: payload.clientId || null,
+    vendorId: payload.vendorId || null,
+    description: String(payload.description || "").trim(),
+    subtotal: toCurrencyAmount(payload.subtotal),
+    taxRate: Number(payload.taxRate ?? store.company.defaultTaxRate),
+    expenseAccountCode: payload.expenseAccountCode || "6100",
+    interval: String(payload.interval || "monthly").trim().toLowerCase(),
+    nextDate: payload.nextDate,
+    createdAt: new Date().toISOString(),
+    lastRunAt: null,
+    active: true,
+  };
+
+  if (!template.label || !template.description || !template.nextDate) {
+    throw new Error("Recurring template label, description, and next date are required.");
+  }
+
+  if (type === "invoice" && !template.clientId) {
+    throw new Error("Recurring invoice requires a client.");
+  }
+
+  if (type === "bill" && !template.vendorId) {
+    throw new Error("Recurring bill requires a vendor.");
+  }
+
+  store.recurringTemplates.push(template);
+  return template;
+}
+
+function runRecurringTemplate(store, templateId, payload) {
+  const template = store.recurringTemplates.find((item) => item.id === templateId);
+
+  if (!template) {
+    throw new Error("Recurring template not found.");
+  }
+
+  if (!template.active) {
+    throw new Error("Recurring template is inactive.");
+  }
+
+  const runDate = payload.runDate || template.nextDate;
+  let result;
+
+  if (template.type === "invoice") {
+    result = createInvoice(store, {
+      clientId: template.clientId,
+      description: template.description,
+      subtotal: template.subtotal,
+      taxRate: template.taxRate,
+      issueDate: runDate,
+      dueDate: payload.dueDate || runDate,
+      notes: `Generated from ${template.label}`,
+      status: "sent",
+    });
+  } else {
+    result = createBill(store, {
+      vendorId: template.vendorId,
+      description: template.description,
+      subtotal: template.subtotal,
+      taxRate: template.taxRate,
+      expenseAccountCode: template.expenseAccountCode,
+      issueDate: runDate,
+      dueDate: payload.dueDate || runDate,
+      notes: `Generated from ${template.label}`,
+      status: "open",
+    });
+  }
+
+  template.lastRunAt = new Date().toISOString();
+  template.nextDate = payload.nextDate || template.nextDate;
+  return result;
+}
+
+function toggleChecklistItem(store, itemId) {
+  const item = (store.closeChecklist || []).find((entry) => entry.id === itemId);
+
+  if (!item) {
+    throw new Error("Checklist item not found.");
+  }
+
+  item.done = !item.done;
+  item.updatedAt = new Date().toISOString();
+  return item;
+}
+
+function toCsv(rows, headers) {
+  const encode = (value) => {
+    const raw = String(value ?? "");
+    return `"${raw.replaceAll('"', '""')}"`;
+  };
+
+  return [headers.map((header) => encode(header.label)).join(",")]
+    .concat(
+      rows.map((row) => headers.map((header) => encode(row[header.key])).join(","))
+    )
+    .join("\n");
 }
 
 function escapeHtml(value) {
@@ -956,6 +1176,13 @@ function sendHtml(req, res, statusCode, html) {
   res.end(html);
 }
 
+function sendCsv(req, res, statusCode, filename, csv) {
+  const headers = buildSecurityHeaders(req, "text/csv; charset=utf-8", "no-store");
+  headers["Content-Disposition"] = `attachment; filename="${filename}"`;
+  res.writeHead(statusCode, headers);
+  res.end(csv);
+}
+
 function readStaticFile(filePath) {
   const resolvedPath = path.resolve(ROOT, filePath);
 
@@ -1337,6 +1564,20 @@ async function handleApi(req, res) {
     return;
   }
 
+  if (url.pathname.startsWith("/api/invoices/") && url.pathname.endsWith("/status") && req.method === "POST") {
+    const invoiceId = url.pathname.split("/")[3];
+    await handleDataMutation(req, res, session, (store, payload) => {
+      const invoice = store.invoices.find((item) => item.id === invoiceId);
+
+      if (!invoice) {
+        throw new Error("Invoice not found.");
+      }
+
+      return updateRecordWorkflow(invoice, payload);
+    });
+    return;
+  }
+
   if (url.pathname.startsWith("/api/invoices/") && url.pathname.endsWith("/pay") && req.method === "POST") {
     const invoiceId = url.pathname.split("/")[3];
     await handleDataMutation(req, res, session, (store, payload) =>
@@ -1347,6 +1588,20 @@ async function handleApi(req, res) {
 
   if (url.pathname === "/api/bills" && req.method === "POST") {
     await handleDataMutation(req, res, session, createBill);
+    return;
+  }
+
+  if (url.pathname.startsWith("/api/bills/") && url.pathname.endsWith("/status") && req.method === "POST") {
+    const billId = url.pathname.split("/")[3];
+    await handleDataMutation(req, res, session, (store, payload) => {
+      const bill = store.bills.find((item) => item.id === billId);
+
+      if (!bill) {
+        throw new Error("Bill not found.");
+      }
+
+      return updateRecordWorkflow(bill, payload);
+    });
     return;
   }
 
@@ -1365,6 +1620,24 @@ async function handleApi(req, res) {
 
   if (
     url.pathname.startsWith("/api/purchase-orders/") &&
+    url.pathname.endsWith("/status") &&
+    req.method === "POST"
+  ) {
+    const orderId = url.pathname.split("/")[3];
+    await handleDataMutation(req, res, session, (store, payload) => {
+      const order = store.purchaseOrders.find((item) => item.id === orderId);
+
+      if (!order) {
+        throw new Error("Purchase order not found.");
+      }
+
+      return updateRecordWorkflow(order, payload);
+    });
+    return;
+  }
+
+  if (
+    url.pathname.startsWith("/api/purchase-orders/") &&
     url.pathname.endsWith("/convert") &&
     req.method === "POST"
   ) {
@@ -1377,6 +1650,101 @@ async function handleApi(req, res) {
 
   if (url.pathname === "/api/journal-entries" && req.method === "POST") {
     await handleDataMutation(req, res, session, createManualJournal);
+    return;
+  }
+
+  if (url.pathname === "/api/recurring-templates" && req.method === "POST") {
+    await handleDataMutation(req, res, session, createRecurringTemplate);
+    return;
+  }
+
+  if (
+    url.pathname.startsWith("/api/recurring-templates/") &&
+    url.pathname.endsWith("/run") &&
+    req.method === "POST"
+  ) {
+    const templateId = url.pathname.split("/")[3];
+    await handleDataMutation(req, res, session, (store, payload) =>
+      runRecurringTemplate(store, templateId, payload)
+    );
+    return;
+  }
+
+  if (
+    url.pathname.startsWith("/api/close-checklist/") &&
+    url.pathname.endsWith("/toggle") &&
+    req.method === "POST"
+  ) {
+    const itemId = url.pathname.split("/")[3];
+    await handleDataMutation(req, res, session, (store) => toggleChecklistItem(store, itemId));
+    return;
+  }
+
+  if (url.pathname === "/exports/invoices.csv" && req.method === "GET") {
+    if (!requireAdmin(req, res, session)) {
+      return;
+    }
+
+    const store = readStore();
+    const csv = toCsv(store.invoices, [
+      { key: "number", label: "Invoice" },
+      { key: "clientName", label: "Client" },
+      { key: "issueDate", label: "Issue Date" },
+      { key: "dueDate", label: "Due Date" },
+      { key: "status", label: "Status" },
+      { key: "total", label: "Total" },
+      { key: "balanceDue", label: "Balance Due" },
+    ]);
+    sendCsv(req, res, 200, "invoices.csv", csv);
+    return;
+  }
+
+  if (url.pathname === "/exports/bills.csv" && req.method === "GET") {
+    if (!requireAdmin(req, res, session)) {
+      return;
+    }
+
+    const store = readStore();
+    const csv = toCsv(store.bills, [
+      { key: "number", label: "Bill" },
+      { key: "vendorName", label: "Vendor" },
+      { key: "issueDate", label: "Issue Date" },
+      { key: "dueDate", label: "Due Date" },
+      { key: "status", label: "Status" },
+      { key: "total", label: "Total" },
+      { key: "balanceDue", label: "Balance Due" },
+    ]);
+    sendCsv(req, res, 200, "bills.csv", csv);
+    return;
+  }
+
+  if (url.pathname === "/exports/journals.csv" && req.method === "GET") {
+    if (!requireAdmin(req, res, session)) {
+      return;
+    }
+
+    const store = readStore();
+    const rows = store.journalEntries.flatMap((entry) =>
+      entry.lines.map((line) => ({
+        reference: entry.reference,
+        date: entry.date,
+        memo: entry.memo,
+        sourceType: entry.sourceType,
+        accountCode: line.accountCode,
+        debit: line.debit,
+        credit: line.credit,
+      }))
+    );
+    const csv = toCsv(rows, [
+      { key: "reference", label: "Journal" },
+      { key: "date", label: "Date" },
+      { key: "memo", label: "Memo" },
+      { key: "sourceType", label: "Source" },
+      { key: "accountCode", label: "Account" },
+      { key: "debit", label: "Debit" },
+      { key: "credit", label: "Credit" },
+    ]);
+    sendCsv(req, res, 200, "journals.csv", csv);
     return;
   }
 
@@ -1465,7 +1833,7 @@ const server = http.createServer(async (req, res) => {
   cleanupSessions();
 
   try {
-    if ((req.url || "").startsWith("/api/")) {
+    if ((req.url || "").startsWith("/api/") || (req.url || "").startsWith("/exports/")) {
       await handleApi(req, res);
       return;
     }

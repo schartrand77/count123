@@ -267,6 +267,11 @@ button {
   gap: 12px;
 }
 
+.workspace {
+  display: grid;
+  gap: 18px;
+}
+
 .list-table {
   display: grid;
   gap: 10px;
@@ -306,6 +311,13 @@ button {
   font-size: 0.98rem;
 }
 
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
 .action-button {
   padding: 7px 10px;
   font-size: 0.78rem;
@@ -335,6 +347,28 @@ button {
 
 .dual-list {
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.compact-row {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.export-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.export-links a {
+  color: var(--accent-strong);
+  text-decoration: none;
+  font-size: 0.82rem;
+}
+
+.export-links a:hover,
+.export-links a:focus {
+  text-decoration: underline;
 }
 
 .empty-state {
@@ -393,5 +427,9 @@ button {
   .row-meta {
     justify-items: start;
     text-align: left;
+  }
+
+  .row-actions {
+    justify-content: flex-start;
   }
 }

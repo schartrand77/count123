@@ -329,6 +329,59 @@
                 <div class="summary-grid compact" id="bank-summary-grid"></div>
                 <div class="list-table" id="bank-accounts"></div>
               </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Phase 2</p>
+                    <h3>Recurring transactions</h3>
+                  </div>
+                </div>
+
+                <form class="record-form" id="recurring-form">
+                  <h4>New Recurring Template</h4>
+                  <label class="field">
+                    <span>Type</span>
+                    <select name="type" id="recurring-type" required>
+                      <option value="invoice">Invoice</option>
+                      <option value="bill">Bill</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span>Client</span>
+                    <select name="clientId" id="recurring-client"></select>
+                  </label>
+                  <label class="field">
+                    <span>Vendor</span>
+                    <select name="vendorId" id="recurring-vendor"></select>
+                  </label>
+                  <label class="field">
+                    <span>Label</span>
+                    <input name="label" type="text" required />
+                  </label>
+                  <label class="field">
+                    <span>Description</span>
+                    <input name="description" type="text" required />
+                  </label>
+                  <label class="field">
+                    <span>Subtotal</span>
+                    <input name="subtotal" type="number" step="0.01" min="0" required />
+                  </label>
+                  <label class="field">
+                    <span>Tax Rate</span>
+                    <input name="taxRate" id="recurring-tax-rate" type="number" step="0.01" min="0" required />
+                  </label>
+                  <label class="field">
+                    <span>Next Date</span>
+                    <input name="nextDate" type="date" required />
+                  </label>
+                  <label class="field">
+                    <span>Expense Account</span>
+                    <select name="expenseAccountCode" id="recurring-expense-account"></select>
+                  </label>
+                  <button class="primary-button" type="submit">Save Template</button>
+                </form>
+              </section>
             </div>
 
             <div class="stack">
@@ -391,6 +444,22 @@
                 </div>
                 <div class="summary-grid compact" id="tax-grid"></div>
                 <div class="report-grid" id="report-grid"></div>
+              </section>
+
+              <section class="panel">
+                <div class="panel-header">
+                  <div>
+                    <p class="eyebrow">Workflow Depth</p>
+                    <h3>Recurring, close, and exports</h3>
+                  </div>
+                </div>
+                <div class="list-table" id="recurring-list"></div>
+                <div class="list-table" id="checklist-list"></div>
+                <div class="export-links">
+                  <a class="ghost-button" href="/exports/invoices.csv" target="_blank" rel="noreferrer">Export Invoices CSV</a>
+                  <a class="ghost-button" href="/exports/bills.csv" target="_blank" rel="noreferrer">Export Bills CSV</a>
+                  <a class="ghost-button" href="/exports/journals.csv" target="_blank" rel="noreferrer">Export Journals CSV</a>
+                </div>
               </section>
 
               <section class="panel">

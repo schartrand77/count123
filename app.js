@@ -1,53 +1,55 @@
-const state = {
-  app: null,
-  bank: null,
+const state = { app: null, bank: null };
+
+const el = {
+  adminBadge: document.getElementById("admin-badge"),
+  adminLogoutButton: document.getElementById("admin-logout"),
+  adminLoginForm: document.getElementById("admin-login-form"),
+  adminEmailInput: document.getElementById("admin-email"),
+  adminUsernameInput: document.getElementById("admin-username"),
+  adminPasswordInput: document.getElementById("admin-password"),
+  adminLoginSubmit: document.getElementById("admin-login-submit"),
+  adminMessage: document.getElementById("admin-message"),
+  authPanel: document.getElementById("auth-panel"),
+  workspace: document.getElementById("workspace"),
+  companyName: document.getElementById("company-name"),
+  summaryGrid: document.getElementById("summary-grid"),
+  bankSummaryGrid: document.getElementById("bank-summary-grid"),
+  bankAccounts: document.getElementById("bank-accounts"),
+  invoiceList: document.getElementById("invoice-list"),
+  billList: document.getElementById("bill-list"),
+  purchaseOrderList: document.getElementById("purchase-order-list"),
+  accountList: document.getElementById("account-list"),
+  journalList: document.getElementById("journal-list"),
+  taxGrid: document.getElementById("tax-grid"),
+  reportGrid: document.getElementById("report-grid"),
+  clientList: document.getElementById("client-list"),
+  vendorList: document.getElementById("vendor-list"),
+  recurringList: document.getElementById("recurring-list"),
+  checklistList: document.getElementById("checklist-list"),
+  connectBankButton: document.getElementById("connect-bank"),
+  clientForm: document.getElementById("client-form"),
+  vendorForm: document.getElementById("vendor-form"),
+  companyForm: document.getElementById("company-form"),
+  accountForm: document.getElementById("account-form"),
+  invoiceForm: document.getElementById("invoice-form"),
+  billForm: document.getElementById("bill-form"),
+  purchaseOrderForm: document.getElementById("purchase-order-form"),
+  journalForm: document.getElementById("journal-form"),
+  recurringForm: document.getElementById("recurring-form"),
+  companyNameInput: document.getElementById("company-name-input"),
+  companyCurrencyInput: document.getElementById("company-currency-input"),
+  companyTaxNameInput: document.getElementById("company-tax-name-input"),
+  companyTaxRateInput: document.getElementById("company-tax-rate-input"),
+  invoiceTaxRateInput: document.getElementById("invoice-tax-rate"),
+  billTaxRateInput: document.getElementById("bill-tax-rate"),
+  recurringTaxRateInput: document.getElementById("recurring-tax-rate"),
 };
 
-const adminBadge = document.getElementById("admin-badge");
-const adminLogoutButton = document.getElementById("admin-logout");
-const adminLoginForm = document.getElementById("admin-login-form");
-const adminEmailInput = document.getElementById("admin-email");
-const adminUsernameInput = document.getElementById("admin-username");
-const adminPasswordInput = document.getElementById("admin-password");
-const adminLoginSubmit = document.getElementById("admin-login-submit");
-const adminMessage = document.getElementById("admin-message");
-const authPanel = document.getElementById("auth-panel");
-const workspace = document.getElementById("workspace");
-const companyName = document.getElementById("company-name");
-const summaryGrid = document.getElementById("summary-grid");
-const bankSummaryGrid = document.getElementById("bank-summary-grid");
-const bankAccounts = document.getElementById("bank-accounts");
-const invoiceList = document.getElementById("invoice-list");
-const billList = document.getElementById("bill-list");
-const purchaseOrderList = document.getElementById("purchase-order-list");
-const accountList = document.getElementById("account-list");
-const journalList = document.getElementById("journal-list");
-const taxGrid = document.getElementById("tax-grid");
-const reportGrid = document.getElementById("report-grid");
-const clientList = document.getElementById("client-list");
-const vendorList = document.getElementById("vendor-list");
-const connectBankButton = document.getElementById("connect-bank");
-
-const clientForm = document.getElementById("client-form");
-const vendorForm = document.getElementById("vendor-form");
-const companyForm = document.getElementById("company-form");
-const accountForm = document.getElementById("account-form");
-const invoiceForm = document.getElementById("invoice-form");
-const billForm = document.getElementById("bill-form");
-const purchaseOrderForm = document.getElementById("purchase-order-form");
-const journalForm = document.getElementById("journal-form");
-const companyNameInput = document.getElementById("company-name-input");
-const companyCurrencyInput = document.getElementById("company-currency-input");
-const companyTaxNameInput = document.getElementById("company-tax-name-input");
-const companyTaxRateInput = document.getElementById("company-tax-rate-input");
-const invoiceTaxRateInput = document.getElementById("invoice-tax-rate");
-const billTaxRateInput = document.getElementById("bill-tax-rate");
-
 function currency(value) {
-  const currencyCode = state.app?.company?.currency || "CAD";
+  const code = state.app?.company?.currency || "CAD";
   return new Intl.NumberFormat("en-CA", {
     style: "currency",
-    currency: currencyCode,
+    currency: code,
   }).format(Number(value || 0));
 }
 
@@ -62,13 +64,9 @@ function escapeHtml(value) {
 
 async function api(path, options = {}) {
   const response = await fetch(path, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {}),
-    },
+    headers: { "Content-Type": "application/json", ...(options.headers || {}) },
     ...options,
   });
-
   const payload = await response.json().catch(() => ({}));
 
   if (!response.ok) {
@@ -78,56 +76,51 @@ async function api(path, options = {}) {
   return payload;
 }
 
+function empty(target, message) {
+  target.innerHTML = `<p class="empty-state">${message}</p>`;
+}
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
+
 function setAdminUi(adminStatus) {
   const configured = Boolean(adminStatus?.configured);
   const authenticated = Boolean(adminStatus?.authenticated);
 
-  adminBadge.textContent = authenticated
+  el.adminBadge.textContent = authenticated
     ? `Admin online: ${adminStatus.username}`
     : configured
       ? "Admin offline"
       : "Admin unconfigured";
 
-  adminLogoutButton.disabled = !authenticated;
-  adminLoginSubmit.disabled = !configured || authenticated;
-  adminEmailInput.disabled = !configured || authenticated;
-  adminUsernameInput.disabled = !configured || authenticated;
-  adminPasswordInput.disabled = !configured || authenticated;
-
-  authPanel.hidden = authenticated;
-  workspace.hidden = !authenticated;
+  el.adminLogoutButton.disabled = !authenticated;
+  el.adminLoginSubmit.disabled = !configured || authenticated;
+  el.adminEmailInput.disabled = !configured || authenticated;
+  el.adminUsernameInput.disabled = !configured || authenticated;
+  el.adminPasswordInput.disabled = !configured || authenticated;
+  el.authPanel.hidden = authenticated;
+  el.workspace.hidden = !authenticated;
 
   if (!configured) {
-    adminMessage.textContent =
+    el.adminMessage.textContent =
       "Configure ADMIN_EMAIL, ADMIN_USERNAME, and ADMIN_PASSWORD_HASH first.";
   } else if (!authenticated) {
-    adminMessage.textContent =
+    el.adminMessage.textContent =
       "Enter the configured admin credentials to access the accounting workspace.";
   }
 }
 
-function renderSimpleList(target, rows, config) {
-  if (!rows.length) {
-    target.innerHTML = `<p class="empty-state">${config.empty}</p>`;
-    return;
-  }
-
-  target.innerHTML = rows.map((row) => config.render(row)).join("");
-}
-
 function renderSummaryCards() {
   const summary = state.app.summary;
+  const taxName = state.app.company.taxName;
 
-  summaryGrid.innerHTML = [
+  el.summaryGrid.innerHTML = [
     { label: "Cash", value: currency(summary.cash), note: "Live balance from journals" },
     { label: "Open Invoices", value: currency(summary.openInvoices), note: "Outstanding receivables" },
     { label: "Payables Due", value: currency(summary.payablesDue), note: "Open supplier obligations" },
     { label: "Net Income", value: currency(summary.netIncome), note: "Derived from posted entries" },
-    {
-      label: `${state.app.company.taxName} Payable`,
-      value: currency(summary.taxPayable),
-      note: `Current ${state.app.company.taxName} position`,
-    },
+    { label: `${taxName} Payable`, value: currency(summary.taxPayable), note: `Current ${taxName} position` },
   ]
     .map(
       (item) => `
@@ -141,122 +134,180 @@ function renderSummaryCards() {
     .join("");
 }
 
+function paymentHistoryHtml(history) {
+  if (!history?.length) {
+    return "<small>No payments recorded.</small>";
+  }
+
+  const recent = history
+    .map((payment) => `${escapeHtml(payment.paymentDate)} ${currency(payment.amount)}`)
+    .join(" | ");
+
+  return `<small>${recent}</small>`;
+}
+
 function renderInvoices() {
-  renderSimpleList(invoiceList, state.app.invoices, {
-    empty: "No invoices posted yet.",
-    render: (invoice) => `
-      <article class="data-row">
-        <div>
-          <h4>${escapeHtml(invoice.number)} | ${escapeHtml(invoice.clientName)}</h4>
-          <p>${escapeHtml(invoice.description)}</p>
-          <small>Issued ${escapeHtml(invoice.issueDate)} | Due ${escapeHtml(invoice.dueDate)}</small>
-        </div>
-        <div class="row-meta">
-          <strong>${currency(invoice.total)}</strong>
-          <span>${escapeHtml(invoice.status)}</span>
-          <small>Balance ${currency(invoice.balanceDue)}</small>
-          ${
-            invoice.status !== "paid"
-              ? `<button class="ghost-button action-button" data-action="pay-invoice" data-id="${escapeHtml(invoice.id)}">Record Payment</button>`
-              : ""
-          }
-        </div>
-      </article>
-    `,
-  });
+  if (!state.app.invoices.length) {
+    empty(el.invoiceList, "No invoices posted yet.");
+    return;
+  }
+
+  el.invoiceList.innerHTML = state.app.invoices
+    .map(
+      (invoice) => `
+        <article class="data-row">
+          <div>
+            <h4>${escapeHtml(invoice.number)} | ${escapeHtml(invoice.clientName)}</h4>
+            <p>${escapeHtml(invoice.description)}</p>
+            <small>Issued ${escapeHtml(invoice.issueDate)} | Due ${escapeHtml(invoice.dueDate)} | ${escapeHtml(invoice.notes || "No note")}</small>
+            ${paymentHistoryHtml(invoice.paymentHistory)}
+          </div>
+          <div class="row-meta">
+            <strong>${currency(invoice.total)}</strong>
+            <span>${escapeHtml(invoice.status)}</span>
+            <small>Balance ${currency(invoice.balanceDue)}</small>
+            <div class="row-actions">
+              ${
+                invoice.status !== "paid"
+                  ? `<button class="ghost-button action-button" data-action="pay-invoice" data-id="${escapeHtml(invoice.id)}">Record Payment</button>`
+                  : ""
+              }
+              <button class="ghost-button action-button" data-action="invoice-status" data-id="${escapeHtml(invoice.id)}">Update Status</button>
+              <button class="ghost-button action-button" data-action="invoice-note" data-id="${escapeHtml(invoice.id)}">Edit Note</button>
+            </div>
+          </div>
+        </article>
+      `
+    )
+    .join("");
 }
 
 function renderBills() {
-  renderSimpleList(billList, state.app.bills, {
-    empty: "No bills posted yet.",
-    render: (bill) => `
-      <article class="data-row">
-        <div>
-          <h4>${escapeHtml(bill.number)} | ${escapeHtml(bill.vendorName)}</h4>
-          <p>${escapeHtml(bill.description)}</p>
-          <small>Issued ${escapeHtml(bill.issueDate)} | Due ${escapeHtml(bill.dueDate)}</small>
-        </div>
-        <div class="row-meta">
-          <strong>${currency(bill.total)}</strong>
-          <span>${escapeHtml(bill.status)}</span>
-          <small>Balance ${currency(bill.balanceDue)}</small>
-          ${
-            bill.status !== "paid"
-              ? `<button class="ghost-button action-button" data-action="pay-bill" data-id="${escapeHtml(bill.id)}">Mark Paid</button>`
-              : ""
-          }
-        </div>
-      </article>
-    `,
-  });
+  if (!state.app.bills.length) {
+    empty(el.billList, "No bills posted yet.");
+    return;
+  }
+
+  el.billList.innerHTML = state.app.bills
+    .map(
+      (bill) => `
+        <article class="data-row">
+          <div>
+            <h4>${escapeHtml(bill.number)} | ${escapeHtml(bill.vendorName)}</h4>
+            <p>${escapeHtml(bill.description)}</p>
+            <small>Issued ${escapeHtml(bill.issueDate)} | Due ${escapeHtml(bill.dueDate)} | ${escapeHtml(bill.notes || "No note")}</small>
+            ${paymentHistoryHtml(bill.paymentHistory)}
+          </div>
+          <div class="row-meta">
+            <strong>${currency(bill.total)}</strong>
+            <span>${escapeHtml(bill.status)}</span>
+            <small>Balance ${currency(bill.balanceDue)}</small>
+            <div class="row-actions">
+              ${
+                bill.status !== "paid"
+                  ? `<button class="ghost-button action-button" data-action="pay-bill" data-id="${escapeHtml(bill.id)}">Record Payment</button>`
+                  : ""
+              }
+              <button class="ghost-button action-button" data-action="bill-status" data-id="${escapeHtml(bill.id)}">Update Status</button>
+              <button class="ghost-button action-button" data-action="bill-note" data-id="${escapeHtml(bill.id)}">Edit Note</button>
+            </div>
+          </div>
+        </article>
+      `
+    )
+    .join("");
 }
 
 function renderPurchaseOrders() {
-  renderSimpleList(purchaseOrderList, state.app.purchaseOrders, {
-    empty: "No purchase orders created yet.",
-    render: (order) => `
-      <article class="data-row">
-        <div>
-          <h4>${escapeHtml(order.number)} | ${escapeHtml(order.vendorName)}</h4>
-          <p>${escapeHtml(order.description)}</p>
-          <small>Expected ${escapeHtml(order.expectedDate)}</small>
-        </div>
-        <div class="row-meta">
-          <strong>${currency(order.amount)}</strong>
-          <span>${escapeHtml(order.status)}</span>
-          ${
-            order.status === "open"
-              ? `<button class="ghost-button action-button" data-action="convert-po" data-id="${escapeHtml(order.id)}">Convert to Bill</button>`
-              : ""
-          }
-        </div>
-      </article>
-    `,
-  });
+  if (!state.app.purchaseOrders.length) {
+    empty(el.purchaseOrderList, "No purchase orders created yet.");
+    return;
+  }
+
+  el.purchaseOrderList.innerHTML = state.app.purchaseOrders
+    .map(
+      (order) => `
+        <article class="data-row">
+          <div>
+            <h4>${escapeHtml(order.number)} | ${escapeHtml(order.vendorName)}</h4>
+            <p>${escapeHtml(order.description)}</p>
+            <small>Expected ${escapeHtml(order.expectedDate)} | ${escapeHtml(order.notes || "No note")}</small>
+          </div>
+          <div class="row-meta">
+            <strong>${currency(order.amount)}</strong>
+            <span>${escapeHtml(order.status)}</span>
+            <div class="row-actions">
+              ${
+                order.status !== "billed"
+                  ? `<button class="ghost-button action-button" data-action="po-status" data-id="${escapeHtml(order.id)}">Update Status</button>`
+                  : ""
+              }
+              ${
+                order.status !== "billed"
+                  ? `<button class="ghost-button action-button" data-action="convert-po" data-id="${escapeHtml(order.id)}">Convert to Bill</button>`
+                  : ""
+              }
+              <button class="ghost-button action-button" data-action="po-note" data-id="${escapeHtml(order.id)}">Edit Note</button>
+            </div>
+          </div>
+        </article>
+      `
+    )
+    .join("");
 }
 
 function renderAccounts() {
-  renderSimpleList(accountList, state.app.accounts, {
-    empty: "No accounts available.",
-    render: (account) => `
-      <article class="table-row">
-        <div><span>Code</span><strong>${escapeHtml(account.code)}</strong></div>
-        <div><span>Account</span><strong>${escapeHtml(account.name)}</strong></div>
-        <div><span>Type</span><strong>${escapeHtml(account.type)}</strong></div>
-        <div><span>Balance</span><strong>${currency(account.balance)}</strong></div>
-      </article>
-    `,
-  });
+  if (!state.app.accounts.length) {
+    empty(el.accountList, "No accounts available.");
+    return;
+  }
+
+  el.accountList.innerHTML = state.app.accounts
+    .map(
+      (account) => `
+        <article class="table-row">
+          <div><span>Code</span><strong>${escapeHtml(account.code)}</strong></div>
+          <div><span>Account</span><strong>${escapeHtml(account.name)}</strong></div>
+          <div><span>Type</span><strong>${escapeHtml(account.type)}</strong></div>
+          <div><span>Balance</span><strong>${currency(account.balance)}</strong></div>
+        </article>
+      `
+    )
+    .join("");
 }
 
 function renderJournals() {
-  renderSimpleList(journalList, state.app.journalEntries, {
-    empty: "No journal entries posted yet.",
-    render: (entry) => `
-      <article class="data-row">
-        <div>
-          <h4>${escapeHtml(entry.reference)} | ${escapeHtml(entry.memo)}</h4>
-          <p>${entry.lines
-            .map(
-              (line) =>
-                `${escapeHtml(line.accountCode)} Dr ${currency(line.debit)} / Cr ${currency(line.credit)}`
-            )
-            .join("<br />")}</p>
-          <small>${escapeHtml(entry.date)} | ${escapeHtml(entry.sourceType)}</small>
-        </div>
-      </article>
-    `,
-  });
+  if (!state.app.journalEntries.length) {
+    empty(el.journalList, "No journal entries posted yet.");
+    return;
+  }
+
+  el.journalList.innerHTML = state.app.journalEntries
+    .map(
+      (entry) => `
+        <article class="data-row">
+          <div>
+            <h4>${escapeHtml(entry.reference)} | ${escapeHtml(entry.memo)}</h4>
+            <p>${entry.lines
+              .map((line) => `${escapeHtml(line.accountCode)} Dr ${currency(line.debit)} / Cr ${currency(line.credit)}`)
+              .join("<br />")}</p>
+            <small>${escapeHtml(entry.date)} | ${escapeHtml(entry.sourceType)}</small>
+          </div>
+        </article>
+      `
+    )
+    .join("");
 }
 
 function renderTaxAndReports() {
   const tax = state.app.tax;
   const reports = state.app.reports;
+  const taxName = state.app.company.taxName;
 
-  taxGrid.innerHTML = [
-    { label: `Collected ${state.app.company.taxName}`, value: currency(tax.collected) },
-    { label: `Recoverable ${state.app.company.taxName}`, value: currency(tax.recoverable) },
-    { label: `Net ${state.app.company.taxName}`, value: currency(tax.netRemittance) },
+  el.taxGrid.innerHTML = [
+    { label: `Collected ${taxName}`, value: currency(tax.collected) },
+    { label: `Recoverable ${taxName}`, value: currency(tax.recoverable) },
+    { label: `Net ${taxName}`, value: currency(tax.netRemittance) },
   ]
     .map(
       (item) => `
@@ -268,7 +319,7 @@ function renderTaxAndReports() {
     )
     .join("");
 
-  reportGrid.innerHTML = `
+  el.reportGrid.innerHTML = `
     <article class="report-card">
       <span>Profit & Loss</span>
       <strong>${currency(reports.profitAndLoss.netIncome)}</strong>
@@ -283,40 +334,43 @@ function renderTaxAndReports() {
 }
 
 function renderMasterLists() {
-  renderSimpleList(clientList, state.app.clients, {
-    empty: "No clients yet.",
-    render: (client) => `
-      <article class="mini-row">
-        <strong>${escapeHtml(client.name)}</strong>
-        <small>${escapeHtml(client.email || "No email")}</small>
-      </article>
-    `,
-  });
+  if (!state.app.clients.length) {
+    empty(el.clientList, "No clients yet.");
+  } else {
+    el.clientList.innerHTML = state.app.clients
+      .map(
+        (client) => `
+          <article class="mini-row">
+            <strong>${escapeHtml(client.name)}</strong>
+            <small>${escapeHtml(client.email || "No email")}</small>
+          </article>
+        `
+      )
+      .join("");
+  }
 
-  renderSimpleList(vendorList, state.app.vendors, {
-    empty: "No vendors yet.",
-    render: (vendor) => `
-      <article class="mini-row">
-        <strong>${escapeHtml(vendor.name)}</strong>
-        <small>${escapeHtml(vendor.email || "No email")}</small>
-      </article>
-    `,
-  });
+  if (!state.app.vendors.length) {
+    empty(el.vendorList, "No vendors yet.");
+  } else {
+    el.vendorList.innerHTML = state.app.vendors
+      .map(
+        (vendor) => `
+          <article class="mini-row">
+            <strong>${escapeHtml(vendor.name)}</strong>
+            <small>${escapeHtml(vendor.email || "No email")}</small>
+          </article>
+        `
+      )
+      .join("");
+  }
 }
 
 function renderBank() {
   const bank = state.bank || { configured: false, connected: false, accounts: [] };
-
-  bankSummaryGrid.innerHTML = [
-    {
-      label: "Status",
-      value: bank.connected ? "Connected" : bank.configured ? "Ready" : "Not configured",
-    },
+  el.bankSummaryGrid.innerHTML = [
+    { label: "Status", value: bank.connected ? "Connected" : bank.configured ? "Ready" : "Not configured" },
     { label: "Accounts", value: String(bank.accounts.length) },
-    {
-      label: "Last Sync",
-      value: bank.lastSyncAt ? new Date(bank.lastSyncAt).toLocaleString() : "Pending",
-    },
+    { label: "Last Sync", value: bank.lastSyncAt ? new Date(bank.lastSyncAt).toLocaleString() : "Pending" },
   ]
     .map(
       (item) => `
@@ -328,24 +382,78 @@ function renderBank() {
     )
     .join("");
 
-  renderSimpleList(bankAccounts, bank.accounts, {
-    empty: "Connect RBC after signing in to sync bank balances.",
-    render: (account) => `
-      <article class="data-row">
-        <div>
-          <h4>${escapeHtml(account.name)}</h4>
-          <p>${escapeHtml(account.type || "Business account")}</p>
-          <small>${escapeHtml(account.id || "")}</small>
-        </div>
-        <div class="row-meta">
-          <strong>${currency(account.balance || account.availableBalance || 0)}</strong>
-          <span>${escapeHtml(account.currency || state.app.company.currency)}</span>
-        </div>
-      </article>
-    `,
-  });
+  if (!bank.accounts.length) {
+    empty(el.bankAccounts, "Connect RBC after signing in to sync bank balances.");
+  } else {
+    el.bankAccounts.innerHTML = bank.accounts
+      .map(
+        (account) => `
+          <article class="data-row">
+            <div>
+              <h4>${escapeHtml(account.name)}</h4>
+              <p>${escapeHtml(account.type || "Business account")}</p>
+              <small>${escapeHtml(account.id || "")}</small>
+            </div>
+            <div class="row-meta">
+              <strong>${currency(account.balance || account.availableBalance || 0)}</strong>
+              <span>${escapeHtml(account.currency || state.app.company.currency)}</span>
+            </div>
+          </article>
+        `
+      )
+      .join("");
+  }
 
-  connectBankButton.disabled = !bank.configured;
+  el.connectBankButton.disabled = !bank.configured;
+}
+
+function renderRecurringTemplates() {
+  if (!state.app.recurringTemplates.length) {
+    empty(el.recurringList, "No recurring templates yet.");
+    return;
+  }
+
+  el.recurringList.innerHTML = state.app.recurringTemplates
+    .map(
+      (template) => `
+        <article class="data-row">
+          <div>
+            <h4>${escapeHtml(template.label)}</h4>
+            <p>${escapeHtml(template.description)}</p>
+            <small>${escapeHtml(template.type)} | ${escapeHtml(template.interval)} | next ${escapeHtml(template.nextDate)}</small>
+          </div>
+          <div class="row-meta">
+            <strong>${currency(template.subtotal)}</strong>
+            <span>${template.active ? "active" : "inactive"}</span>
+            <button class="ghost-button action-button" data-action="run-recurring" data-id="${escapeHtml(template.id)}">Run Now</button>
+          </div>
+        </article>
+      `
+    )
+    .join("");
+}
+
+function renderChecklist() {
+  if (!state.app.closeChecklist.length) {
+    empty(el.checklistList, "No close checklist items.");
+    return;
+  }
+
+  el.checklistList.innerHTML = state.app.closeChecklist
+    .map(
+      (item) => `
+        <article class="data-row compact-row">
+          <div>
+            <h4>${escapeHtml(item.label)}</h4>
+            <small>${item.done ? "Completed" : "Open"}</small>
+          </div>
+          <div class="row-meta">
+            <button class="ghost-button action-button" data-action="toggle-checklist" data-id="${escapeHtml(item.id)}">${item.done ? "Mark Open" : "Mark Done"}</button>
+          </div>
+        </article>
+      `
+    )
+    .join("");
 }
 
 function renderSelectOptions() {
@@ -369,16 +477,20 @@ function renderSelectOptions() {
   document.getElementById("journal-debit").innerHTML = accountOptions;
   document.getElementById("journal-credit").innerHTML = accountOptions;
   document.getElementById("bill-account").innerHTML = expenseOptions || accountOptions;
+  document.getElementById("recurring-client").innerHTML = `<option value="">Select client</option>${clientOptions}`;
+  document.getElementById("recurring-vendor").innerHTML = `<option value="">Select vendor</option>${vendorOptions}`;
+  document.getElementById("recurring-expense-account").innerHTML = expenseOptions || accountOptions;
 }
 
 function renderWorkspace() {
-  companyName.textContent = `${state.app.company.name} Workspace`;
-  companyNameInput.value = state.app.company.name;
-  companyCurrencyInput.value = state.app.company.currency;
-  companyTaxNameInput.value = state.app.company.taxName;
-  companyTaxRateInput.value = state.app.company.defaultTaxRate;
-  invoiceTaxRateInput.value = state.app.company.defaultTaxRate;
-  billTaxRateInput.value = state.app.company.defaultTaxRate;
+  el.companyName.textContent = `${state.app.company.name} Workspace`;
+  el.companyNameInput.value = state.app.company.name;
+  el.companyCurrencyInput.value = state.app.company.currency;
+  el.companyTaxNameInput.value = state.app.company.taxName;
+  el.companyTaxRateInput.value = state.app.company.defaultTaxRate;
+  el.invoiceTaxRateInput.value = state.app.company.defaultTaxRate;
+  el.billTaxRateInput.value = state.app.company.defaultTaxRate;
+  el.recurringTaxRateInput.value = state.app.company.defaultTaxRate;
   renderSummaryCards();
   renderSelectOptions();
   renderInvoices();
@@ -389,6 +501,8 @@ function renderWorkspace() {
   renderTaxAndReports();
   renderMasterLists();
   renderBank();
+  renderRecurringTemplates();
+  renderChecklist();
 }
 
 async function refreshApp() {
@@ -404,161 +518,227 @@ async function submitJsonForm(form, path, transform) {
     method: "POST",
     body: JSON.stringify(payload),
   });
-
   state.app = result.app;
   renderWorkspace();
   form.reset();
 }
 
-function today() {
-  return new Date().toISOString().slice(0, 10);
+function updateLocalApp(result) {
+  state.app = result.app;
+  renderWorkspace();
 }
 
-adminLoginForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
+async function promptAndPost(path, bodyFactory) {
+  const body = bodyFactory();
 
+  if (!body) {
+    return;
+  }
+
+  const result = await api(path, { method: "POST", body: JSON.stringify(body) });
+  updateLocalApp(result);
+}
+
+el.adminLoginForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
   try {
-    adminMessage.textContent = "Signing in...";
+    el.adminMessage.textContent = "Signing in...";
     const payload = await api("/api/admin/login", {
       method: "POST",
       body: JSON.stringify({
-        email: adminEmailInput.value,
-        username: adminUsernameInput.value,
-        password: adminPasswordInput.value,
+        email: el.adminEmailInput.value,
+        username: el.adminUsernameInput.value,
+        password: el.adminPasswordInput.value,
       }),
     });
-
-    adminPasswordInput.value = "";
+    el.adminPasswordInput.value = "";
     setAdminUi(payload);
     await refreshApp();
   } catch (error) {
-    adminPasswordInput.value = "";
-    adminMessage.textContent = error.message;
+    el.adminPasswordInput.value = "";
+    el.adminMessage.textContent = error.message;
   }
 });
 
-adminLogoutButton.addEventListener("click", async () => {
+el.adminLogoutButton.addEventListener("click", async () => {
   try {
-    const payload = await api("/api/admin/logout", {
-      method: "POST",
-      body: JSON.stringify({}),
-    });
+    const payload = await api("/api/admin/logout", { method: "POST", body: JSON.stringify({}) });
     state.app = null;
     state.bank = null;
     setAdminUi(payload);
   } catch (error) {
-    adminMessage.textContent = error.message;
+    el.adminMessage.textContent = error.message;
   }
 });
 
-clientForm.addEventListener("submit", async (event) => {
+el.clientForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await submitJsonForm(clientForm, "/api/clients", (payload) => payload);
+  await submitJsonForm(el.clientForm, "/api/clients", (payload) => payload);
 });
 
-vendorForm.addEventListener("submit", async (event) => {
+el.vendorForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await submitJsonForm(vendorForm, "/api/vendors", (payload) => payload);
+  await submitJsonForm(el.vendorForm, "/api/vendors", (payload) => payload);
 });
 
-companyForm.addEventListener("submit", async (event) => {
+el.companyForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await submitJsonForm(companyForm, "/api/company", (payload) => ({
+  await submitJsonForm(el.companyForm, "/api/company", (payload) => ({
     ...payload,
     defaultTaxRate: Number(payload.defaultTaxRate),
     currency: String(payload.currency || "").toUpperCase(),
   }));
 });
 
-accountForm.addEventListener("submit", async (event) => {
+el.accountForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await submitJsonForm(accountForm, "/api/accounts", (payload) => payload);
+  await submitJsonForm(el.accountForm, "/api/accounts", (payload) => payload);
 });
 
-invoiceForm.addEventListener("submit", async (event) => {
+el.invoiceForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await submitJsonForm(invoiceForm, "/api/invoices", (payload) => ({
+  await submitJsonForm(el.invoiceForm, "/api/invoices", (payload) => ({
     ...payload,
     subtotal: Number(payload.subtotal),
     taxRate: Number(payload.taxRate),
   }));
 });
 
-billForm.addEventListener("submit", async (event) => {
+el.billForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await submitJsonForm(billForm, "/api/bills", (payload) => ({
+  await submitJsonForm(el.billForm, "/api/bills", (payload) => ({
     ...payload,
     subtotal: Number(payload.subtotal),
     taxRate: Number(payload.taxRate),
   }));
 });
 
-purchaseOrderForm.addEventListener("submit", async (event) => {
+el.purchaseOrderForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await submitJsonForm(purchaseOrderForm, "/api/purchase-orders", (payload) => ({
+  await submitJsonForm(el.purchaseOrderForm, "/api/purchase-orders", (payload) => ({
     ...payload,
     amount: Number(payload.amount),
   }));
 });
 
-journalForm.addEventListener("submit", async (event) => {
+el.journalForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  await submitJsonForm(journalForm, "/api/journal-entries", (payload) => ({
+  await submitJsonForm(el.journalForm, "/api/journal-entries", (payload) => ({
     ...payload,
     amount: Number(payload.amount),
+  }));
+});
+
+el.recurringForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitJsonForm(el.recurringForm, "/api/recurring-templates", (payload) => ({
+    ...payload,
+    subtotal: Number(payload.subtotal),
+    taxRate: Number(payload.taxRate),
   }));
 });
 
 document.body.addEventListener("click", async (event) => {
   const button = event.target.closest("[data-action]");
-
   if (!button) {
     return;
   }
 
   try {
     if (button.dataset.action === "pay-invoice") {
-      const result = await api(`/api/invoices/${button.dataset.id}/pay`, {
-        method: "POST",
-        body: JSON.stringify({ paymentDate: today() }),
+      await promptAndPost(`/api/invoices/${button.dataset.id}/pay`, () => {
+        const amount = window.prompt("Payment amount");
+        if (!amount) return null;
+        return { paymentDate: today(), amount: Number(amount) };
       });
-      state.app = result.app;
-      renderWorkspace();
+    }
+
+    if (button.dataset.action === "invoice-status") {
+      await promptAndPost(`/api/invoices/${button.dataset.id}/status`, () => {
+        const status = window.prompt("Invoice status", "sent");
+        if (!status) return null;
+        return { status };
+      });
+    }
+
+    if (button.dataset.action === "invoice-note") {
+      await promptAndPost(`/api/invoices/${button.dataset.id}/status`, () => {
+        const notes = window.prompt("Invoice note");
+        if (notes === null) return null;
+        return { notes };
+      });
     }
 
     if (button.dataset.action === "pay-bill") {
-      const result = await api(`/api/bills/${button.dataset.id}/pay`, {
-        method: "POST",
-        body: JSON.stringify({ paymentDate: today() }),
+      await promptAndPost(`/api/bills/${button.dataset.id}/pay`, () => {
+        const amount = window.prompt("Payment amount");
+        if (!amount) return null;
+        return { paymentDate: today(), amount: Number(amount) };
       });
-      state.app = result.app;
-      renderWorkspace();
+    }
+
+    if (button.dataset.action === "bill-status") {
+      await promptAndPost(`/api/bills/${button.dataset.id}/status`, () => {
+        const status = window.prompt("Bill status", "open");
+        if (!status) return null;
+        return { status };
+      });
+    }
+
+    if (button.dataset.action === "bill-note") {
+      await promptAndPost(`/api/bills/${button.dataset.id}/status`, () => {
+        const notes = window.prompt("Bill note");
+        if (notes === null) return null;
+        return { notes };
+      });
+    }
+
+    if (button.dataset.action === "po-status") {
+      await promptAndPost(`/api/purchase-orders/${button.dataset.id}/status`, () => {
+        const status = window.prompt("PO status", "approved");
+        if (!status) return null;
+        return { status };
+      });
+    }
+
+    if (button.dataset.action === "po-note") {
+      await promptAndPost(`/api/purchase-orders/${button.dataset.id}/status`, () => {
+        const notes = window.prompt("Purchase order note");
+        if (notes === null) return null;
+        return { notes };
+      });
     }
 
     if (button.dataset.action === "convert-po") {
-      const result = await api(`/api/purchase-orders/${button.dataset.id}/convert`, {
-        method: "POST",
-        body: JSON.stringify({
-          issueDate: today(),
-          dueDate: today(),
-          taxRate: state.app.company.defaultTaxRate,
-          expenseAccountCode: "6100",
-        }),
-      });
-      state.app = result.app;
-      renderWorkspace();
+      await promptAndPost(`/api/purchase-orders/${button.dataset.id}/convert`, () => ({
+        issueDate: today(),
+        dueDate: today(),
+        taxRate: state.app.company.defaultTaxRate,
+        expenseAccountCode: "6100",
+      }));
+    }
+
+    if (button.dataset.action === "run-recurring") {
+      await promptAndPost(`/api/recurring-templates/${button.dataset.id}/run`, () => ({
+        runDate: today(),
+        dueDate: today(),
+      }));
+    }
+
+    if (button.dataset.action === "toggle-checklist") {
+      await promptAndPost(`/api/close-checklist/${button.dataset.id}/toggle`, () => ({}));
     }
   } catch (error) {
-    adminMessage.textContent = error.message;
+    el.adminMessage.textContent = error.message;
   }
 });
 
-connectBankButton.addEventListener("click", async () => {
+el.connectBankButton.addEventListener("click", async () => {
   try {
     const payload = await api("/api/rbc/connect-url", { method: "GET", headers: {} });
     window.location.href = payload.url;
   } catch (error) {
-    adminMessage.textContent = error.message;
+    el.adminMessage.textContent = error.message;
   }
 });
 
@@ -566,12 +746,11 @@ async function initialize() {
   try {
     const adminStatus = await api("/api/admin/status", { method: "GET", headers: {} });
     setAdminUi(adminStatus);
-
     if (adminStatus.authenticated) {
       await refreshApp();
     }
   } catch (error) {
-    adminMessage.textContent = error.message;
+    el.adminMessage.textContent = error.message;
   }
 }
 
