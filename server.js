@@ -14,6 +14,7 @@ const SESSION_SECRET =
 const TRUST_PROXY = process.env.TRUST_PROXY === "true";
 const FORCE_HTTPS = process.env.FORCE_HTTPS === "true";
 const ALLOW_INSECURE_BANK_URLS = process.env.ALLOW_INSECURE_BANK_URLS === "true";
+const APP_ORIGIN = (process.env.APP_ORIGIN || "").trim();
 const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 const MAX_LOGIN_ATTEMPTS = 5;
 
@@ -1077,7 +1078,11 @@ function parseCookies(req) {
       return cookies;
     }
 
-    cookies[rawName] = decodeURIComponent(rawValue.join("=") || "");
+    try {
+      cookies[rawName] = decodeURIComponent(rawValue.join("=") || "");
+    } catch {
+      cookies[rawName] = rawValue.join("=") || "";
+    }
     return cookies;
   }, {});
 }
@@ -1156,7 +1161,16 @@ function getSessionFromRequest(req) {
 
   const [sessionId, signature] = cookieValue.split(".");
 
-  if (!sessionId || !signature || sign(sessionId) !== signature) {
+  if (!sessionId || !signature) {
+    return null;
+  }
+
+  const expectedSignature = sign(sessionId);
+  const signatureIsValid =
+    signature.length === expectedSignature.length &&
+    crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSignature));
+
+  if (!signatureIsValid) {
     return null;
   }
 
@@ -1254,6 +1268,10 @@ function isSecureRequest(req) {
 }
 
 function getRequestOrigin(req) {
+  if (APP_ORIGIN) {
+    return APP_ORIGIN;
+  }
+
   const protocol = isSecureRequest(req) ? "https" : "http";
   return `${protocol}://${req.headers.host}`;
 }
@@ -1474,8 +1492,14 @@ function sendCsv(req, res, statusCode, filename, csv) {
 
 function readStaticFile(filePath) {
   const resolvedPath = path.resolve(ROOT, filePath);
+  const relativePath = path.relative(ROOT, resolvedPath);
 
-  if (!resolvedPath.startsWith(ROOT)) {
+  if (
+    path.isAbsolute(relativePath) ||
+    relativePath.startsWith("..") ||
+    relativePath.includes(`${path.sep}..${path.sep}`) ||
+    relativePath === ".."
+  ) {
     return null;
   }
 
@@ -2184,6 +2208,11 @@ async function handleApi(req, res) {
   }
 
   if (url.pathname === "/api/rbc/disconnect" && req.method === "POST") {
+    if (!requireAdmin(req, res, session)) {
+      return;
+    }
+
+    assertHttpsForSensitiveRoutes(req);
     resetBankSession(session);
     sendJson(req, res, 200, { disconnected: true });
     return;
